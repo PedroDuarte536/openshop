@@ -27,3 +27,6 @@ PrestaShop alternative. Monorepo (npm workspaces), TypeScript, Node 22+.
 
 ## Demo data
 `python3 scripts/seed-demo.py` fills a running shop with a realistic catalogue (Maison Dune, ceramics): 5 categories, 25 products with generated photos, and 12 orders from 8 customers. It needs Pillow, reads the login from `.env.demo`, and is safe to re-run. `--only "Linen Mug,Bud Vase"` regenerates just those products.
+
+## License
+Elastic License 2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). In plain words: you can use, modify and redistribute OpenShop, including to run your own shop, even commercially, as long as you keep the copyright and licence notices. You may not offer it to others as a hosted or managed service. This is a source-available licence, not an OSI open-source one.
