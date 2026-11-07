@@ -1,16 +1,20 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { esc, renderDocument } from "@openshop/renderer";
+import { ART, esc, renderDocument, type Theme } from "@openshop/renderer";
 import type { Db, Product } from "./types.ts";
 import { OrderError, placeOrder } from "./orders.ts";
 
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' https: data:; form-action 'self'; base-uri 'none'";
+export const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; form-action 'self'; base-uri 'none'";
+const CSP = PAGE_CSP;
 const money = (n: number) => n.toFixed(2);
 
 function html(reply: FastifyReply, body: string, code = 200) {
   return reply.code(code).header("content-security-policy", CSP).type("text/html").send(body);
 }
-const page = (title: string, body: string) => renderDocument(title, body);
+// The shop adopts the theme of the "home" page so it matches the rest of the site.
+let shopTheme: Partial<Theme> | undefined;
+const page = (title: string, body: string) => renderDocument(title, body, shopTheme);
+const ART_LIST = Object.values(ART);
 
 function cartId(req: FastifyRequest): string | null {
   const m = /(?:^|;\s*)cart=([a-f0-9-]{36})/.exec(req.headers.cookie ?? "");
@@ -18,18 +22,21 @@ function cartId(req: FastifyRequest): string | null {
 }
 
 export function registerStorefront(app: FastifyInstance, db: Db) {
+  app.addHook("onRequest", async (req) => {
+    if (req.url.startsWith("/shop")) shopTheme = (await db.pages.find({ slug: "home" }, { limit: 1 }))[0]?.theme;
+  });
   app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string", bodyLimit: 64 * 1024 }, (_r, body, done) =>
     done(null, Object.fromEntries(new URLSearchParams(body as string))));
 
   const card = (p: Product) =>
-    `<article><a href="/shop/product/${esc(p.id)}">${p.images?.[0] ? `<img src="${esc(p.images[0])}" alt="${esc(p.name)}" loading="lazy">` : ""}<h3>${esc(p.name)}</h3><p>${money(p.price)}</p></a></article>`;
+    `<a class="os-pc" href="/shop/product/${esc(p.id)}"><div class="os-pc-img">${p.images?.[0] ? `<img src="${esc(p.images[0])}" alt="${esc(p.name)}" loading="lazy">` : `<div class="os-art" style="background:${ART_LIST[p.name.length % ART_LIST.length].css}"></div>`}</div><div><div class="os-pc-n">${esc(p.name)}</div><div class="os-pc-p">${money(p.price)}</div></div></a>`;
 
   app.get<{ Querystring: { category?: string } }>("/shop", async (req, reply) => {
     const cats = await db.categories.find({}, { sort: { name: 1 } });
     const cat = cats.find((c) => c.slug === req.query.category);
     const products = await db.products.find(cat ? { active: true, categoryId: cat.id } : { active: true }, { sort: { name: 1 } });
     const nav = `<p><a href="/shop">All</a> ${cats.map((c) => `<a href="/shop?category=${encodeURIComponent(c.slug)}">${esc(c.name)}</a>`).join(" ")}</p>`;
-    return html(reply, page("Shop", `<h1>Shop</h1>${nav}<div class="grid">${products.map(card).join("") || "<p>No products.</p>"}</div>`));
+    return html(reply, page("Shop", `<h1>Shop</h1>${nav}<div class="os-shop-grid">${products.map(card).join("") || "<p>No products.</p>"}</div>`));
   });
 
   app.get<{ Params: { id: string } }>("/shop/product/:id", async (req, reply) => {
@@ -37,7 +44,7 @@ export function registerStorefront(app: FastifyInstance, db: Db) {
     if (!p || !p.active) return html(reply, page("Not found", "<h1>Not found</h1>"), 404);
     const imgs = (p.images ?? []).map((i) => `<img src="${esc(i)}" alt="${esc(p.name)}">`).join("");
     const buy = p.stock > 0
-      ? `<form method="post" action="/shop/cart/add" class="stack"><input type="hidden" name="productId" value="${esc(p.id)}"><label>Quantity <input type="number" name="qty" value="1" min="1" max="${Math.min(p.stock, 99)}"></label><button>Add to cart</button></form>`
+      ? `<form method="post" action="/shop/cart/add" class="os-stack"><input type="hidden" name="productId" value="${esc(p.id)}"><label>Quantity <input type="number" name="qty" value="1" min="1" max="${Math.min(p.stock, 99)}"></label><button>Add to cart</button></form>`
       : "<p><strong>Out of stock</strong></p>";
     return html(reply, page(p.name, `<h1>${esc(p.name)}</h1>${imgs}<p>${money(p.price)}</p><p>${esc(p.description ?? "")}</p>${buy}`));
   });
@@ -72,7 +79,7 @@ export function registerStorefront(app: FastifyInstance, db: Db) {
       rows.push(`<tr><td>${esc(p.name)}</td><td>${i.qty}</td><td>${money(p.price * i.qty)}</td><td><form method="post" action="/shop/cart/remove"><input type="hidden" name="productId" value="${esc(p.id)}"><button>Remove</button></form></td></tr>`);
     }
     if (!rows.length) return html(reply, page("Cart", "<h1>Your cart</h1><p>Your cart is empty.</p>"));
-    const form = `<h2>Checkout</h2><form method="post" action="/shop/checkout" class="stack"><input name="name" placeholder="Full name" required><input name="email" type="email" placeholder="Email" required><textarea name="address" placeholder="Delivery address" required></textarea><button>Place order</button></form>`;
+    const form = `<h2>Checkout</h2><form method="post" action="/shop/checkout" class="os-stack"><input name="name" placeholder="Full name" required><input name="email" type="email" placeholder="Email" required><textarea name="address" placeholder="Delivery address" required></textarea><button>Place order</button></form>`;
     return html(reply, page("Cart", `<h1>Your cart</h1><table>${rows.join("")}<tr><th>Total</th><th></th><th>${money(total / 100)}</th><th></th></tr></table>${form}`));
   });
 

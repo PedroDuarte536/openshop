@@ -1,29 +1,30 @@
-import { renderPage, type Block, type ProductCard } from "@openshop/renderer";
+import { normalizeDoc, renderPage, type Node, type PageDoc, type ProductCard } from "@openshop/renderer";
 import type { Db } from "./types.ts";
 
-async function resolveBlocks(db: Db, blocks: Block[]): Promise<Block[]> {
-  return Promise.all(blocks.map(async (b): Promise<Block> => {
-    if (b.type === "columns") return { ...b, columns: await Promise.all(b.columns.map((c) => resolveBlocks(db, c))) };
-    if (b.type !== "productList") return b;
-    const filter: Record<string, unknown> = { active: true };
-    if (b.categoryId) filter.categoryId = b.categoryId;
-    const found = await db.products.find(filter as never, { sort: { name: 1 }, limit: Math.min(Math.max(b.limit ?? 12, 1), 48) });
-    const items: ProductCard[] = found.map((p) => ({ id: p.id, name: p.name, price: p.price, image: p.images?.[0], href: `/shop/product/${p.id}` }));
-    return { ...b, items };
-  }));
+function collectGrids(nodes: Node[], out: Node[] = []): Node[] {
+  for (const n of nodes) { if (n.type === "productGrid") out.push(n); if (n.children) collectGrids(n.children, out); }
+  return out;
 }
 
-const hasDynamic = (blocks: Block[]): boolean =>
-  blocks.some((b) => b.type === "productList" || (b.type === "columns" && b.columns.some(hasDynamic)));
-
-/** Renders page JSON to final static HTML, filling dynamic blocks from the catalogue. Throws on invalid blocks. */
-export async function renderStored(db: Db, title: string, blocks: Block[]): Promise<string> {
-  return renderPage({ title, blocks: await resolveBlocks(db, blocks) });
+/** Validates, cleans and renders. Returns the cleaned document (safe to store) and its final static HTML. */
+export async function renderStored(db: Db, raw: unknown): Promise<{ doc: PageDoc; html: string }> {
+  const doc = normalizeDoc(raw); // throws on invalid structure
+  const lists = new Map<string, ProductCard[]>();
+  for (const g of collectGrids(doc.nodes)) {
+    const p = g.props as { categoryId?: string; limit?: number };
+    const filter = p.categoryId ? { active: true, categoryId: p.categoryId } : { active: true };
+    const found = await db.products.find(filter, { sort: { name: 1 }, limit: p.limit ?? 4 });
+    lists.set(g.id, found.map((x) => ({ id: x.id, name: x.name, price: x.price, image: x.images?.[0], href: `/shop/product/${x.id}` })));
+  }
+  return { doc, html: renderPage(doc, { products: (n) => lists.get(n.id) ?? [] }) };
 }
 
-/** Static HTML goes stale when the catalogue changes, so re-render pages with dynamic blocks. */
+/** Static HTML goes stale when the catalogue changes, so re-render pages that show product grids. */
 export async function rerenderDynamicPages(db: Db): Promise<void> {
   for (const p of await db.pages.find()) {
-    if (hasDynamic(p.blocks)) await db.pages.update(p.id, { html: await renderStored(db, p.title, p.blocks) });
+    if (collectGrids(p.nodes).length) {
+      const { html } = await renderStored(db, { title: p.title, theme: p.theme, nodes: p.nodes });
+      await db.pages.update(p.id, { html });
+    }
   }
 }

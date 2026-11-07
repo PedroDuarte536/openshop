@@ -48,10 +48,14 @@ test("products CRUD; PATCH does not reset other fields", async () => {
   assert.equal((await app.inject({ method: "GET", url: `/api/products/${id}`, headers: h })).statusCode, 404);
 });
 
-test("productList blocks are filled from the catalogue and re-rendered on change", async () => {
+const sec = (children: unknown[]) => ({ id: "s" + Math.random().toString(36).slice(2, 8), type: "section", children: [{ id: "c" + Math.random().toString(36).slice(2, 8), type: "column", children }] });
+const grid = (props: object) => ({ id: "g" + Math.random().toString(36).slice(2, 8), type: "productGrid", props });
+
+test("product grids are filled from the catalogue and re-rendered on change", async () => {
   const { app, h } = await make();
   const cat = (await app.inject({ method: "POST", url: "/api/categories", headers: h, payload: { name: "Home", slug: "home-goods" } })).json();
-  const page = await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "landing", title: "L", blocks: [{ type: "productList", categoryId: cat.id, items: [{ name: "FAKE", price: 1 }] }] } });
+  const page = await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "landing", title: "L", nodes: [sec([grid({ categoryId: cat.id, items: [{ name: "FAKE", price: 1 }] })])] } });
+  assert.equal(page.statusCode, 201);
   assert.doesNotMatch(page.json().html, /FAKE/);
   const pid = (await app.inject({ method: "POST", url: "/api/products", headers: h, payload: { name: "Lamp", price: 20, stock: 1, categoryId: cat.id } })).json().id;
   await app.inject({ method: "POST", url: "/api/products", headers: h, payload: { name: "Other", price: 5, stock: 1 } });
@@ -59,10 +63,26 @@ test("productList blocks are filled from the catalogue and re-rendered on change
   assert.match(served.body, /Lamp/);
   assert.doesNotMatch(served.body, /Other/);
   assert.match(served.headers["content-security-policy"] as string, /default-src 'none'/);
+  assert.match(served.headers["content-security-policy"] as string, /fonts\.googleapis\.com/);
   await app.inject({ method: "PATCH", url: `/api/products/${pid}`, headers: h, payload: { active: false } });
   assert.doesNotMatch((await app.inject({ method: "GET", url: "/s/landing" })).body, /Lamp/);
-  assert.equal((await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "landing", title: "x", blocks: [] } })).statusCode, 409);
-  assert.equal((await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "bad", title: "x", blocks: [{ type: "nope" }] } })).statusCode, 400);
+  assert.equal((await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "landing", title: "x", nodes: [] } })).statusCode, 409);
+});
+
+test("page documents are validated, cleaned, and rendered with theme", async () => {
+  const { app, h } = await make();
+  const bad = await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "bad", title: "x", nodes: [{ id: "a", type: "heading" }] } });
+  assert.equal(bad.statusCode, 400);
+  const evil = await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "evil", title: "x", theme: { primary: "red;}</style><script>1</script>" }, nodes: [{ id: "s1", type: "section", style: { color: "red;}</style>" }, children: [] }] } });
+  assert.equal(evil.statusCode, 201);
+  assert.doesNotMatch(evil.json().html, /<script/);
+  assert.equal(evil.json().theme.primary, "#2B4BFF");
+  const home = await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "home", title: "Home", theme: { primary: "#E4442B" }, nodes: [sec([{ id: "h1", type: "heading", props: { text: "Welcome" } }])] } });
+  assert.match((await app.inject({ method: "GET", url: "/" })).body, /Welcome/);
+  assert.match((await app.inject({ method: "GET", url: "/shop" })).body, /--primary:#E4442B/);
+  const put = await app.inject({ method: "PUT", url: `/api/pages/${home.json().id}`, headers: h, payload: { slug: "home", title: "Home 2", nodes: [] } });
+  assert.equal(put.json().title, "Home 2");
+  assert.equal((await app.inject({ method: "GET", url: "/s/nope" })).statusCode, 404);
 });
 
 test("orders use catalogue prices, enforce stock, and decrement it", async () => {

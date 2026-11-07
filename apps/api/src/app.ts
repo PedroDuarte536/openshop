@@ -1,13 +1,12 @@
 import { randomBytes } from "node:crypto";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import type { DataStore } from "@openshop/db";
-import type { Block } from "@openshop/renderer";
 import { openDb, type Category, type Order, type Product } from "./types.ts";
 import { signToken, verifyPassword, verifyToken } from "./auth.ts";
 import { OrderError, placeOrder } from "./orders.ts";
 import { renderStored, rerenderDynamicPages } from "./pages.ts";
 import { registerUploadParsers, registerUploadRead, saveUpload } from "./uploads.ts";
-import { registerStorefront } from "./storefront.ts";
+import { PAGE_CSP, registerStorefront } from "./storefront.ts";
 
 export interface AppOptions { authSecret?: string; uploadDir?: string }
 
@@ -28,8 +27,8 @@ const categorySchema = {
   properties: { name: { type: "string", minLength: 1 }, slug: { type: "string", pattern: "^[a-z0-9-]+$" } },
 } as const;
 const pageSchema = {
-  type: "object", required: ["slug", "title", "blocks"], additionalProperties: false,
-  properties: { slug: { type: "string", pattern: "^[a-z0-9-]+$" }, title: { type: "string", minLength: 1 }, blocks: { type: "array" } },
+  type: "object", required: ["slug", "title", "nodes"], additionalProperties: false,
+  properties: { slug: { type: "string", pattern: "^[a-z0-9-]+$" }, title: { type: "string", minLength: 1 }, theme: { type: "object" }, nodes: { type: "array" } },
 } as const;
 const orderSchema = {
   type: "object", required: ["items", "customer"], additionalProperties: false,
@@ -133,18 +132,22 @@ export function buildApp(store: DataStore, opts: AppOptions = {}) {
       (await db.orders.update(req.params.id, { status: (req.body as { status: Order["status"] }).status })) ?? notFound(reply));
     admin.get("/api/customers", async () => db.customers.find({}, { sort: { email: 1 } }));
 
-    // pages: JSON is saved, HTML is rendered on save
-    const save = async (b: { slug: string; title: string; blocks: Block[] }) => ({ ...b, html: await renderStored(db, b.title, b.blocks) });
-    admin.get("/api/pages", async () => (await db.pages.find({}, { sort: { slug: 1 } })).map(({ html: _h, ...p }) => p));
+    // pages: the document is saved cleaned, and HTML is rendered on save
+    type PageBody = { slug: string; title: string; theme?: object; nodes: unknown[] };
+    const save = async (b: PageBody) => {
+      const { doc, html } = await renderStored(db, { title: b.title, theme: b.theme, nodes: b.nodes });
+      return { slug: b.slug, title: doc.title, theme: doc.theme!, nodes: doc.nodes, html };
+    };
+    admin.get("/api/pages", async () => (await db.pages.find({}, { sort: { slug: 1 } })).map(({ html: _h, nodes: _n, ...p }) => p));
     admin.get<{ Params: { id: string } }>("/api/pages/:id", async (req, reply) => (await db.pages.get(req.params.id)) ?? notFound(reply));
     admin.post("/api/pages", { schema: { body: pageSchema } }, async (req, reply) => {
-      const b = req.body as { slug: string; title: string; blocks: Block[] };
+      const b = req.body as PageBody;
       if (await db.pages.count({ slug: b.slug })) return reply.code(409).send({ error: "slug exists" });
       try { return reply.code(201).send(await db.pages.insert(await save(b))); }
       catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
     });
     admin.put<{ Params: { id: string } }>("/api/pages/:id", { schema: { body: pageSchema } }, async (req, reply) => {
-      const b = req.body as { slug: string; title: string; blocks: Block[] };
+      const b = req.body as PageBody;
       const [clash] = await db.pages.find({ slug: b.slug }, { limit: 1 });
       if (clash && clash.id !== req.params.id) return reply.code(409).send({ error: "slug exists" });
       try { return (await db.pages.update(req.params.id, await save(b))) ?? notFound(reply); }
@@ -155,7 +158,7 @@ export function buildApp(store: DataStore, opts: AppOptions = {}) {
   // ---- public delivery ----
   registerUploadRead(app, uploadDir);
   registerStorefront(app, db);
-  const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' https: data:; form-action 'self'; base-uri 'none'";
+  const CSP = PAGE_CSP;
   const servePage = async (slug: string, reply: FastifyReply) => {
     const [page] = await db.pages.find({ slug }, { limit: 1 });
     if (!page) return reply.code(404).header("content-security-policy", CSP).type("text/html").send("<h1>Not found</h1>");
