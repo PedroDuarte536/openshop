@@ -24,3 +24,6 @@ PrestaShop alternative. Monorepo (npm workspaces), TypeScript, Node 22+.
     # is created and its password printed once. Without AUTH_SECRET, sessions end on restart.
     cd apps/backoffice && npx ng serve    # proxies /api and /s to :3000
     npm test                              # MONGO_URL=... also runs the Mongo contract
+
+## Demo data
+`python3 scripts/seed-demo.py` fills a running shop with a realistic catalogue (Maison Dune, ceramics): 5 categories, 25 products with generated photos, and 12 orders from 8 customers. It needs Pillow, reads the login from `.env.demo`, and is safe to re-run. `--only "Linen Mug,Bud Vase"` regenerates just those products.
