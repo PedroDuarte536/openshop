@@ -1,0 +1,15 @@
+{
+  "name": "@openshop/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@openshop/db": "*",
+    "@openshop/renderer": "*",
+    "fastify": "^5.0.0"
+  }
+}
