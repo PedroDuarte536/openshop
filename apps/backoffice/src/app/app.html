@@ -1,2 +1,9 @@
-<nav><strong>OpenShop</strong> <a routerLink="/products">Products</a> <a routerLink="/pages">Pages</a></nav>
+<nav>
+  <strong>OpenShop</strong>
+  @if (api.token()) {
+    <a routerLink="/products">Products</a> <a routerLink="/categories">Categories</a>
+    <a routerLink="/orders">Orders</a> <a routerLink="/pages">Pages</a>
+    <button (click)="logout()">Sign out</button>
+  }
+</nav>
 <main><router-outlet /></main>

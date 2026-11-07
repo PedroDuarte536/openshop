@@ -1,5 +1,6 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet, RouterLink } from '@angular/router';
+import { Component, inject } from '@angular/core';
+import { Router, RouterOutlet, RouterLink } from '@angular/router';
+import { ApiService } from './api.service';
 
 @Component({
   imports: [RouterOutlet, RouterLink],
@@ -8,5 +9,7 @@ import { RouterOutlet, RouterLink } from '@angular/router';
   templateUrl: './app.html',
 })
 export class App {
-  protected readonly title = signal('backoffice');
+  protected api = inject(ApiService);
+  private router = inject(Router);
+  protected logout() { this.api.logout(); this.router.navigate(['/login']); }
 }

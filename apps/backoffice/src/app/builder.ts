@@ -2,7 +2,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { FormsModule } from '@angular/forms';
 import { renderPage, type Block } from '@openshop/renderer';
-import { ApiService } from './api.service';
+import { ApiService, Category } from './api.service';
 
 type Simple = Exclude<Block, { type: 'columns' | 'products' }>;
 
@@ -18,6 +18,7 @@ type Simple = Exclude<Block, { type: 'columns' | 'products' }>;
           <button (click)="add('text')">+ Text</button>
           <button (click)="add('image')">+ Image</button>
           <button (click)="add('button')">+ Button</button>
+          <button (click)="add('productList')">+ Products</button>
         </div>
         @for (b of blocks(); track $index) {
           <div class="blk">
@@ -28,6 +29,14 @@ type Simple = Exclude<Block, { type: 'columns' | 'products' }>;
               @case ('image') {
                 <input placeholder="src" [ngModel]="$any(b).src" (ngModelChange)="patch($index, { src: $event })">
                 <input placeholder="alt" [ngModel]="$any(b).alt" (ngModelChange)="patch($index, { alt: $event })">
+              }
+              @case ('productList') {
+                <select [ngModel]="$any(b).categoryId ?? ''" (ngModelChange)="patch($index, { categoryId: $event || undefined })">
+                  <option value="">All categories</option>
+                  @for (c of categories(); track c.id) { <option [value]="c.id">{{ c.name }}</option> }
+                </select>
+                <input type="number" min="1" max="48" placeholder="limit" [ngModel]="$any(b).limit ?? 12" (ngModelChange)="patch($index, { limit: +$event })">
+                <small>Filled from the live catalogue when the page is saved and whenever products change.</small>
               }
               @case ('button') {
                 <input placeholder="label" [ngModel]="$any(b).label" (ngModelChange)="patch($index, { label: $event })">
@@ -42,7 +51,7 @@ type Simple = Exclude<Block, { type: 'columns' | 'products' }>;
         <button (click)="save()">Save &amp; publish</button>
         <span>{{ status() }}</span>
       </section>
-      <iframe sandbox title="preview" [srcdoc]="preview()"></iframe>
+      <iframe sandbox title="preview (product lists show after save)" [srcdoc]="preview()"></iframe>
     </div>`,
 })
 export class Builder {
@@ -51,16 +60,19 @@ export class Builder {
   private san = inject(DomSanitizer);
   title = signal(''); slug = signal('');
   blocks = signal<Block[]>([]);
+  categories = signal<Category[]>([]);
   status = signal('');
   preview = computed(() => this.san.bypassSecurityTrustHtml(renderPage({ title: this.title(), blocks: this.blocks() })) as unknown as string);
 
   ngOnInit() {
+    this.api.categories().subscribe((c) => this.categories.set(c));
     this.api.page(this.id()).subscribe((p) => { this.title.set(p.title); this.slug.set(p.slug); this.blocks.set(p.blocks); });
   }
   add(type: Simple['type']) {
     const b: Record<Simple['type'], Block> = {
       heading: { type: 'heading', text: 'Heading' }, text: { type: 'text', text: 'Text' },
       image: { type: 'image', src: '', alt: '' }, button: { type: 'button', label: 'Click', href: '#' },
+      productList: { type: 'productList', limit: 12 },
     };
     this.blocks.update((l) => [...l, b[type]]);
   }
