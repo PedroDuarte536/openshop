@@ -1,7 +1,7 @@
-import { SqliteDataStore } from "@openshop/db";
+import { SqliteDataStore, MongoDataStore } from "@openshop/db";
 import { buildApp } from "./app.ts";
 
-const store = new SqliteDataStore(process.env.DB_PATH ?? "openshop.db");
+const store = process.env.MONGO_URL ? new MongoDataStore(process.env.MONGO_URL) : new SqliteDataStore(process.env.DB_PATH ?? "openshop.db");
 const app = buildApp(store);
 
 const shutdown = async () => { await app.close(); await store.close(); process.exit(0); };
