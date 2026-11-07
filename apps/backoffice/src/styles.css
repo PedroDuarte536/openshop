@@ -1,0 +1,5 @@
+/* You can add global styles to this file, and also import other style files */
+body{font:15px system-ui,sans-serif;margin:0}nav{display:flex;gap:16px;padding:12px 24px;background:#111;color:#fff}nav a{color:#9cf}main{padding:24px}
+.row{display:flex;gap:8px;margin:8px 0}table{border-collapse:collapse}td,th{padding:6px 12px;border-bottom:1px solid #ddd;text-align:left}.err{color:#b00}
+.builder{display:grid;grid-template-columns:420px 1fr;gap:24px}.builder iframe{width:100%;height:70vh;border:1px solid #ccc}
+.blk{border:1px solid #ddd;padding:8px;margin:8px 0;display:grid;gap:6px}
