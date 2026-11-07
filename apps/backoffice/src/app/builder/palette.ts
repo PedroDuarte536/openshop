@@ -20,8 +20,20 @@ import { BuilderStore, NAMES, snippet } from './store';
           <section class="grp">
             <h4>Widgets <small>drag onto the page</small></h4>
             <div class="tiles">
-              @for (w of widgets; track w.type) {
+              @for (w of basic; track w.type) {
                 <button class="tile" draggable="true" (dragstart)="dragWidget($event, w.type)" (click)="store.addWidget(w.type)" [title]="w.hint">
+                  <span class="ti" [innerHTML]="svg(w.icon)"></span>
+                  <b>{{ w.label }}</b>
+                  <small>{{ w.hint }}</small>
+                </button>
+              }
+            </div>
+          </section>
+          <section class="grp">
+            <h4>Shop widgets <small>fill with real data</small></h4>
+            <div class="tiles">
+              @for (w of shop; track w.type) {
+                <button class="tile shop" draggable="true" (dragstart)="dragWidget($event, w.type)" (click)="store.addWidget(w.type)" [title]="w.hint">
                   <span class="ti" [innerHTML]="svg(w.icon)"></span>
                   <b>{{ w.label }}</b>
                   <small>{{ w.hint }}</small>
@@ -83,7 +95,7 @@ export class Palette {
   store = inject(BuilderStore);
   private san = inject(DomSanitizer);
   tab = signal<'add' | 'sections' | 'layers'>('add');
-  widgets = WIDGETS; layouts = LAYOUTS; snip = snippet;
+  basic = WIDGETS.filter((w) => w.group === 'basic'); shop = WIDGETS.filter((w) => w.group === 'shop'); layouts = LAYOUTS; snip = snippet;
   nm(n: Node) { return NAMES[n.type]; }
   private cache = new Map<string, SafeHtml>();
   /** Live previews rendered by the real renderer, so thumbnails always match what ships. */

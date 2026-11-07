@@ -146,3 +146,59 @@ test("storefront: cart cookie, checkout, confirmation, escaping", async () => {
   assert.equal((await app.inject({ method: "POST", url: "/shop/cart/add", ...form({ productId: "nope", qty: "1" }) })).statusCode, 400);
   assert.equal((await app.inject({ method: "GET", url: "/" })).statusCode, 302);
 });
+
+test("essential pages exist, render real data, and can't be moved or deleted", async () => {
+  const { app, h } = await make();
+  const list = (await app.inject({ method: "GET", url: "/api/pages", headers: h })).json();
+  const sys = list.filter((p: any) => p.system);
+  assert.deepEqual(sys.map((p: any) => p.system).sort(), ["category", "product", "search"]);
+  const productPage = sys.find((p: any) => p.system === "product");
+  // editing keeps the fixed address
+  const full = (await app.inject({ method: "GET", url: `/api/pages/${productPage.id}`, headers: h })).json();
+  const put = await app.inject({ method: "PUT", url: `/api/pages/${productPage.id}`, headers: h, payload: { slug: "hijack", title: "Product page", nodes: full.nodes } });
+  assert.equal(put.json().slug, "system-product");
+  assert.equal((await app.inject({ method: "DELETE", url: `/api/pages/${productPage.id}`, headers: h })).statusCode, 400);
+  assert.equal((await app.inject({ method: "PATCH", url: `/api/pages/${productPage.id}`, headers: h, payload: { slug: "x" } })).statusCode, 400);
+  assert.equal((await app.inject({ method: "GET", url: "/s/system-product" })).statusCode, 404);
+
+  const cat = (await app.inject({ method: "POST", url: "/api/categories", headers: h, payload: { name: "Mugs", slug: "mugs" } })).json();
+  const mug = (await app.inject({ method: "POST", url: "/api/products", headers: h, payload: { name: "Blue <i>Mug</i>", price: 12.5, stock: 4, description: "Holds tea", categoryId: cat.id } })).json();
+  await app.inject({ method: "POST", url: "/api/products", headers: h, payload: { name: "Plate", price: 8, stock: 4 } });
+
+  const prod = await app.inject({ method: "GET", url: `/shop/product/${mug.id}` });
+  assert.equal(prod.statusCode, 200);
+  assert.match(prod.body, /Blue &lt;i&gt;Mug&lt;\/i&gt;/);
+  assert.match(prod.body, /€12\.50/);
+  assert.match(prod.body, new RegExp(`name="productId" value="${mug.id}"`));
+  assert.doesNotMatch(prod.body, /Linen mug/); // never leaks the editor's sample data
+  assert.equal((await app.inject({ method: "GET", url: "/shop/product/nope" })).statusCode, 404);
+
+  const cats = await app.inject({ method: "GET", url: "/shop/category/mugs" });
+  assert.match(cats.body, /Blue/); assert.doesNotMatch(cats.body, /Plate/);
+  assert.equal((await app.inject({ method: "GET", url: "/shop/category/nope" })).statusCode, 404);
+  assert.match((await app.inject({ method: "GET", url: "/shop" })).body, /Plate/);
+  assert.equal((await app.inject({ method: "GET", url: "/shop?category=mugs" })).statusCode, 302);
+
+  const found = await app.inject({ method: "GET", url: "/search?q=TEA" }); // matches the description, case-insensitively
+  assert.match(found.body, /Blue/); assert.doesNotMatch(found.body, /Plate/);
+  assert.match((await app.inject({ method: "GET", url: "/search?q=zzz" })).body, /Nothing matches/);
+  assert.doesNotMatch((await app.inject({ method: "GET", url: "/search?q=%22%3E%3Cscript%3Ealert(1)%3C/script%3E" })).body, /<script>alert/);
+});
+
+test("page addresses can be edited, are unique, and pages can be deleted", async () => {
+  const { app, h } = await make();
+  const mk = async (slug: string) => (await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug, title: slug, nodes: [] } })).json();
+  const a = await mk("about"), b = await mk("contact");
+  const ok = await app.inject({ method: "PATCH", url: `/api/pages/${a.id}`, headers: h, payload: { slug: "our-story" } });
+  assert.equal(ok.statusCode, 200);
+  assert.equal(ok.json().slug, "our-story");
+  assert.equal((await app.inject({ method: "GET", url: "/s/our-story" })).statusCode, 200);
+  assert.equal((await app.inject({ method: "GET", url: "/s/about" })).statusCode, 404);
+  assert.equal((await app.inject({ method: "PATCH", url: `/api/pages/${b.id}`, headers: h, payload: { slug: "our-story" } })).statusCode, 409);
+  assert.equal((await app.inject({ method: "PATCH", url: `/api/pages/${b.id}`, headers: h, payload: { slug: "Bad Slug!" } })).statusCode, 400);
+  assert.equal((await app.inject({ method: "DELETE", url: `/api/pages/${b.id}`, headers: h })).statusCode, 204);
+  assert.equal((await app.inject({ method: "GET", url: "/s/contact" })).statusCode, 404);
+  // becoming the front page is just taking the address "home"
+  await app.inject({ method: "PATCH", url: `/api/pages/${a.id}`, headers: h, payload: { slug: "home" } });
+  assert.equal((await app.inject({ method: "GET", url: "/" })).statusCode, 200);
+});

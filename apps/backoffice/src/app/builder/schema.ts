@@ -12,7 +12,7 @@ export interface Field {
 const VARIANTS = [{ v: 'solid', label: 'Solid' }, { v: 'outline', label: 'Outline' }, { v: 'soft', label: 'Soft' }, { v: 'ghost', label: 'Ghost' }];
 const RATIOS = ['auto', '1/1', '4/3', '3/2', '16/9', '4/5', '3/4'].map((v) => ({ v, label: v === 'auto' ? 'Auto' : v.replace('/', ':') }));
 
-export const PROP_FIELDS: Record<NodeType, Field[]> = {
+export const PROP_FIELDS = {
   section: [],
   column: [],
   heading: [
@@ -61,10 +61,35 @@ export const PROP_FIELDS: Record<NodeType, Field[]> = {
     { key: 'items', label: 'Images', kind: 'items', addLabel: 'Add image', itemDefault: { art: 'sunset' }, itemFields: [{ key: 'src', label: 'Image', kind: 'image' }] },
   ],
   productGrid: [
+    { key: 'source', label: 'Which products', kind: 'seg', options: [{ v: 'catalogue', label: 'From the catalogue' }, { v: 'results', label: "This page's results" }], hint: "On category and search pages, \"This page's results\" shows the matching products." },
     { key: 'categoryId', label: 'Category', kind: 'category' },
-    { key: 'limit', label: 'How many', kind: 'number', min: 1, max: 24 },
+    { key: 'limit', label: 'How many', kind: 'number', min: 1, max: 48 },
     { key: 'cols', label: 'Columns', kind: 'seg', options: [2, 3, 4, 5].map((n) => ({ v: n, label: String(n) })) },
   ],
+} as unknown as Record<NodeType, Field[]>;
+
+PROP_FIELDS.productTitle = [{ key: 'level', label: 'Heading level', kind: 'seg', options: [1, 2, 3].map((n) => ({ v: n, label: 'H' + n })) }];
+PROP_FIELDS.productPrice = [];
+PROP_FIELDS.productDescription = [];
+PROP_FIELDS.productGallery = [{ key: 'ratio', label: 'Shape', kind: 'select', options: RATIOS }];
+PROP_FIELDS.addToCart = [{ key: 'label', label: 'Button text', kind: 'text' }, { key: 'qty', label: 'Show quantity box', kind: 'toggle' }];
+PROP_FIELDS.searchBox = [{ key: 'placeholder', label: 'Placeholder', kind: 'text' }, { key: 'button', label: 'Button text', kind: 'text' }];
+PROP_FIELDS.dynamicTitle = [
+  { key: 'source', label: 'Shows', kind: 'seg', options: [{ v: 'category', label: 'Category name' }, { v: 'search', label: 'Search words' }] },
+  { key: 'level', label: 'Heading level', kind: 'seg', options: [1, 2, 3].map((n) => ({ v: n, label: 'H' + n })) },
+];
+PROP_FIELDS.categoryNav = [{ key: 'layout', label: 'Look', kind: 'seg', options: [{ v: 'pills', label: 'Pills' }, { v: 'list', label: 'List' }] }];
+
+/** Shown at the top of a widget's Content tab. */
+export const NOTES: Partial<Record<NodeType, string>> = {
+  productTitle: 'Shows the name of the product being viewed. You see a sample here; visitors see the real product.',
+  productPrice: 'Shows the price of the product being viewed. Sample data here.',
+  productDescription: 'Shows the product description. Sample data here.',
+  productGallery: "Shows the product's photos. Sample artwork here.",
+  addToCart: 'Adds the product being viewed to the cart.',
+  searchBox: 'Visitors type here and land on the search results page.',
+  dynamicTitle: 'Shows the category name, or the words someone searched for. Sample data here.',
+  categoryNav: 'Lists your categories so visitors can browse. Uses your real categories.',
 };
 
 export const ARTS = [...ART_KEYS];

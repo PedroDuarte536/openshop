@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { ART, esc, renderDocument, type Theme } from "@openshop/renderer";
+import { esc, renderDocument, type Theme } from "@openshop/renderer";
 import type { Db, Product } from "./types.ts";
 import { OrderError, placeOrder } from "./orders.ts";
+import { renderSystem, toCard } from "./pages.ts";
 
 export const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; form-action 'self'; base-uri 'none'";
 const CSP = PAGE_CSP;
@@ -14,7 +15,6 @@ function html(reply: FastifyReply, body: string, code = 200) {
 // The shop adopts the theme of the "home" page so it matches the rest of the site.
 let shopTheme: Partial<Theme> | undefined;
 const page = (title: string, body: string) => renderDocument(title, body, shopTheme);
-const ART_LIST = Object.values(ART);
 
 function cartId(req: FastifyRequest): string | null {
   const m = /(?:^|;\s*)cart=([a-f0-9-]{36})/.exec(req.headers.cookie ?? "");
@@ -28,25 +28,35 @@ export function registerStorefront(app: FastifyInstance, db: Db) {
   app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string", bodyLimit: 64 * 1024 }, (_r, body, done) =>
     done(null, Object.fromEntries(new URLSearchParams(body as string))));
 
-  const card = (p: Product) =>
-    `<a class="os-pc" href="/shop/product/${esc(p.id)}"><div class="os-pc-img">${p.images?.[0] ? `<img src="${esc(p.images[0])}" alt="${esc(p.name)}" loading="lazy">` : `<div class="os-art" style="background:${ART_LIST[p.name.length % ART_LIST.length].css}"></div>`}</div><div><div class="os-pc-n">${esc(p.name)}</div><div class="os-pc-p">${money(p.price)}</div></div></a>`;
+  const activeProducts = async (categoryId?: string) =>
+    db.products.find(categoryId ? { active: true, categoryId } : { active: true }, { sort: { name: 1 } });
 
+  // Product, category and search pages are designed in the page builder and filled with real data here.
   app.get<{ Querystring: { category?: string } }>("/shop", async (req, reply) => {
-    const cats = await db.categories.find({}, { sort: { name: 1 } });
-    const cat = cats.find((c) => c.slug === req.query.category);
-    const products = await db.products.find(cat ? { active: true, categoryId: cat.id } : { active: true }, { sort: { name: 1 } });
-    const nav = `<p><a href="/shop">All</a> ${cats.map((c) => `<a href="/shop?category=${encodeURIComponent(c.slug)}">${esc(c.name)}</a>`).join(" ")}</p>`;
-    return html(reply, page("Shop", `<h1>Shop</h1>${nav}<div class="os-shop-grid">${products.map(card).join("") || "<p>No products.</p>"}</div>`));
+    if (req.query.category) return reply.redirect(`/shop/category/${encodeURIComponent(req.query.category)}`, 302);
+    const results = (await activeProducts()).map(toCard);
+    return html(reply, await renderSystem(db, "category", { category: { name: "All products", slug: "" }, results }));
+  });
+
+  app.get<{ Params: { slug: string } }>("/shop/category/:slug", async (req, reply) => {
+    const [cat] = await db.categories.find({ slug: req.params.slug }, { limit: 1 });
+    if (!cat) return html(reply, page("Not found", "<h1>Category not found</h1><p><a href=\"/shop\">Back to the shop</a></p>"), 404);
+    const results = (await activeProducts(cat.id)).map(toCard);
+    return html(reply, await renderSystem(db, "category", { category: { name: cat.name, slug: cat.slug }, results }, cat.name));
+  });
+
+  app.get<{ Querystring: { q?: string } }>("/search", async (req, reply) => {
+    const q = String(req.query.q ?? "").trim().slice(0, 100);
+    const needle = q.toLowerCase();
+    const results = q ? (await activeProducts()).filter((p) => p.name.toLowerCase().includes(needle) || (p.description ?? "").toLowerCase().includes(needle)).map(toCard) : [];
+    return html(reply, await renderSystem(db, "search", { query: q, results }, q ? `Results for ${q}` : "Search"));
   });
 
   app.get<{ Params: { id: string } }>("/shop/product/:id", async (req, reply) => {
     const p = await db.products.get(req.params.id);
-    if (!p || !p.active) return html(reply, page("Not found", "<h1>Not found</h1>"), 404);
-    const imgs = (p.images ?? []).map((i) => `<img src="${esc(i)}" alt="${esc(p.name)}">`).join("");
-    const buy = p.stock > 0
-      ? `<form method="post" action="/shop/cart/add" class="os-stack"><input type="hidden" name="productId" value="${esc(p.id)}"><label>Quantity <input type="number" name="qty" value="1" min="1" max="${Math.min(p.stock, 99)}"></label><button>Add to cart</button></form>`
-      : "<p><strong>Out of stock</strong></p>";
-    return html(reply, page(p.name, `<h1>${esc(p.name)}</h1>${imgs}<p>${money(p.price)}</p><p>${esc(p.description ?? "")}</p>${buy}`));
+    if (!p || !p.active) return html(reply, page("Not found", "<h1>Product not found</h1><p><a href=\"/shop\">Back to the shop</a></p>"), 404);
+    const product = { id: p.id, name: p.name, price: p.price, description: p.description, images: p.images, stock: p.stock };
+    return html(reply, await renderSystem(db, "product", { product }, p.name));
   });
 
   app.post<{ Body: { productId?: string; qty?: string } }>("/shop/cart/add", async (req, reply) => {

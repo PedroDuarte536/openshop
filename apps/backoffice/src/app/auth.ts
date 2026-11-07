@@ -3,6 +3,7 @@ import { HttpInterceptorFn } from '@angular/common/http';
 import { CanActivateFn, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { tap } from 'rxjs';
+import { ART } from '@openshop/renderer';
 import { ApiService } from './api.service';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
@@ -21,21 +22,34 @@ export const authGuard: CanActivateFn = () => {
   selector: 'app-login',
   imports: [FormsModule],
   template: `
-    <h2>Sign in</h2>
-    <form (ngSubmit)="go()" class="stack">
-      <input name="email" type="email" [(ngModel)]="email" placeholder="Email" required autocomplete="username">
-      <input name="password" type="password" [(ngModel)]="password" placeholder="Password" required autocomplete="current-password">
-      <button>Sign in</button>
-      @if (error()) { <p class="err">{{ error() }}</p> }
-    </form>`,
+    <div class="login">
+      <section class="login-art" [style.background]="art">
+        <a class="brand"><i></i>OpenShop</a>
+        <h1>Your shop, your way.</h1>
+        <p>Design pages, manage products and take orders from one calm place.</p>
+      </section>
+      <section class="login-form">
+        <form class="login-card" (ngSubmit)="go()">
+          <h2>Welcome back</h2>
+          <p>Sign in to manage your shop.</p>
+          <label class="fld"><span>Email</span><input class="inp" name="email" type="email" [(ngModel)]="email" required autocomplete="username" placeholder="you@yourshop.com"></label>
+          <label class="fld"><span>Password</span><input class="inp" name="password" type="password" [(ngModel)]="password" required autocomplete="current-password"></label>
+          <button class="btn primary" [disabled]="busy()">{{ busy() ? 'Signing in…' : 'Sign in' }}</button>
+          @if (error()) { <p class="err" role="alert">{{ error() }}</p> }
+        </form>
+      </section>
+    </div>`,
 })
 export class Login {
   private api = inject(ApiService); private router = inject(Router);
-  email = ''; password = ''; error = signal('');
+  art = ART.aurora.css;
+  email = ''; password = ''; error = signal(''); busy = signal(false);
+  constructor() { if (this.api.token()) this.router.navigate(['/products']); }
   go() {
+    this.busy.set(true); this.error.set('');
     this.api.login(this.email, this.password).subscribe({
       next: () => this.router.navigate(['/products']),
-      error: (e) => this.error.set(e.status === 429 ? 'Too many attempts, wait a minute' : 'Invalid email or password'),
+      error: (e) => { this.busy.set(false); this.error.set(e.status === 429 ? 'Too many attempts. Wait a minute and try again.' : 'That email and password don\'t match.'); },
     });
   }
 }

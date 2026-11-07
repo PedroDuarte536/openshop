@@ -191,3 +191,11 @@
 .bld .tpl.armed{border-color:#c0262d;background:#fff5f5}
 .bld .tpl.armed small{color:#c0262d;font-weight:700}
 .bld .hides{margin-top:8px}
+
+.bld .chrome .sys{margin:0 auto;font-style:normal;color:var(--ink);background:var(--citrus);padding:5px 14px;border-radius:99px;font-size:11.5px;font-weight:800}
+.bld .chrome .addr{margin:0 auto;display:flex;align-items:center;background:#fff;border-radius:99px;padding:0 4px 0 14px;font-size:12px;box-shadow:inset 0 0 0 1.5px transparent;transition:box-shadow .15s;cursor:text}
+.bld .chrome .addr:focus-within{box-shadow:inset 0 0 0 1.5px var(--cobalt)}
+.bld .chrome .addr b{color:var(--mut);font-weight:600}
+.bld .chrome .addr input{border:0;outline:0;background:transparent;font:700 12px 'Figtree';color:var(--ink);width:150px;padding:6px 8px 6px 0}
+.bld .shopnote{padding:10px 12px;border-radius:11px;background:rgba(255,210,63,.22);color:#5b4700}
+.bld .tile.shop .ti{background:rgba(255,210,63,.35);color:#7a5e00}

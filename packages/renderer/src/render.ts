@@ -2,14 +2,22 @@ import { BASE_CSS, bgIsDark, hideRules, responsiveBlocks, themeVars } from "./cs
 import { iconSvg } from "./icons.ts";
 import { FONTS, ART } from "./presets.ts";
 import { DEFAULT_THEME, esc, normalizeDoc, normTheme, safeImage, safeUrl } from "./model.ts";
-import type { ArtKey, IconKey, Node, PageDoc, ProductCard, RenderOptions, Theme } from "./model.ts";
+import type { ArtKey, IconKey, Node, PageDoc, ProductCard, RenderContext, RenderOptions, Theme } from "./model.ts";
 
 const SAMPLE: ProductCard[] = [
   { name: "Linen mug", price: 24 }, { name: "Stoneware bowl", price: 38 }, { name: "Bud vase", price: 29 }, { name: "Dune plate", price: 32 },
   { name: "Tall carafe", price: 54 }, { name: "Salt cellar", price: 18 }, { name: "Tea set", price: 96 }, { name: "Dish rack", price: 41 },
 ];
 
-interface Ctx { editor: boolean; theme: Theme; opts: RenderOptions }
+const SAMPLE_CTX: Required<Omit<RenderContext, "results">> & { results: ProductCard[] } = {
+  product: { id: "sample", name: "Linen mug", price: 24, stock: 12, images: [],
+    description: "Thrown by hand and glazed in small batches. Holds a generous 350ml, sits warm in the palm, and goes in the dishwasher.\n\nEvery piece is slightly different." },
+  category: { name: "Mugs", slug: "mugs" }, query: "mug",
+  categories: [{ name: "Mugs", slug: "mugs" }, { name: "Bowls", slug: "bowls" }, { name: "Vases", slug: "vases" }, { name: "Plates", slug: "plates" }],
+  results: SAMPLE,
+};
+
+interface Ctx { editor: boolean; theme: Theme; opts: RenderOptions; data: RenderContext }
 const P = (n: Node) => n.props as Record<string, any>;
 
 /** Attributes common to every node. Editor-only hooks never reach published pages. */
@@ -74,8 +82,9 @@ function widget(n: Node, ctx: Ctx): string {
     }
     case "productGrid": {
       const limit = p.limit as number;
-      const items = (ctx.opts.products ? ctx.opts.products(n) : SAMPLE).slice(0, limit);
-      if (!items.length) return `<div ${root(n, ctx, "os-note")}>No products to show yet.</div>`;
+      const fromResults = p.source === "results";
+      const items = (fromResults ? ctx.data.results ?? [] : ctx.opts.products ? ctx.opts.products(n) : SAMPLE).slice(0, limit);
+      if (!items.length) return `<div ${root(n, ctx, "os-note")}>${ctx.data.query ? `Nothing matches “${esc(ctx.data.query)}”. Try a different search.` : "No products to show yet."}</div>`;
       const offset = hash(items[0].name) % CARD_ART.length;
       const cards = items.map((it, i) => {
         const img = safeImage(it.image);
@@ -84,6 +93,38 @@ function widget(n: Node, ctx: Ctx): string {
         return `<${tag} class="os-pc"${tag === "a" ? ` href="${esc(safeUrl(it.href))}"` : ""}><div class="os-pc-img">${visual}</div><div><div class="os-pc-n">${esc(it.name)}</div><div class="os-pc-p">${money(ctx.theme, it.price)}</div></div></${tag}>`;
       }).join("");
       return `<div ${root(n, ctx, `os-pg os-pg-${p.cols}`)}>${cards}</div>`;
+    }
+    case "productTitle": {
+      const pr = ctx.data.product; if (!pr) return "";
+      return `<h${p.level} ${root(n, ctx, `os-h os-h${p.level}`)}>${esc(pr.name)}</h${p.level}>`;
+    }
+    case "productPrice": { const pr = ctx.data.product; return pr ? `<div ${root(n, ctx, "os-price")}>${money(ctx.theme, pr.price)}</div>` : ""; }
+    case "productDescription": { const pr = ctx.data.product; return pr?.description ? `<p ${root(n, ctx, "os-p")}>${esc(pr.description)}</p>` : ""; }
+    case "productGallery": {
+      const pr = ctx.data.product; if (!pr) return "";
+      const imgs = (pr.images ?? []).map(safeImage).filter(Boolean);
+      const vis = (i: number) => imgs[i] ? `<img src="${esc(imgs[i])}" alt="${esc(pr.name)}" loading="lazy" decoding="async">` : art(CARD_ART[(hash(pr.name) + i) % CARD_ART.length]);
+      const count = Math.max(imgs.length, 1);
+      const thumbs = count > 1 ? `<div class="os-pgal-t">${Array.from({ length: Math.min(count, 5) - 1 }, (_, i) => `<figure class="os-fig" style="--ratio:1/1;--fit:cover">${vis(i + 1)}</figure>`).join("")}</div>` : "";
+      return `<div ${root(n, ctx, "os-pgal")}><figure class="os-fig" style="--ratio:${p.ratio === "auto" ? "auto" : p.ratio};--fit:cover">${vis(0)}</figure>${thumbs}</div>`;
+    }
+    case "addToCart": {
+      const pr = ctx.data.product; if (!pr) return "";
+      const out = pr.stock !== undefined && pr.stock <= 0;
+      const qty = p.qty && !out ? `<input class="os-qty" type="number" name="qty" value="1" min="1" max="${Math.min(pr.stock ?? 99, 99)}" aria-label="Quantity">` : `<input type="hidden" name="qty" value="1">`;
+      return `<form ${root(n, ctx, "os-atc")} method="post" action="/shop/cart/add"><input type="hidden" name="productId" value="${esc(pr.id)}">${qty}<button class="os-btn os-btn--solid os-btn--lg"${out ? " disabled" : ""}${ctx.editor ? ' type="button"' : ""}${ed(ctx, "label")}>${out ? "Out of stock" : esc(p.label)}</button></form>`;
+    }
+    case "searchBox":
+      return `<form ${root(n, ctx, "os-search")} method="get" action="/search" role="search"><input type="search" name="q" value="${esc(ctx.data.query ?? "")}" placeholder="${esc(p.placeholder)}" aria-label="Search"><button class="os-btn os-btn--solid"${ctx.editor ? ' type="button"' : ""}${ed(ctx, "button")}>${esc(p.button)}</button></form>`;
+    case "dynamicTitle": {
+      const text = p.source === "search" ? (ctx.data.query ? `Results for “${ctx.data.query}”` : "Search") : ctx.data.category?.name ?? "All products";
+      return `<h${p.level} ${root(n, ctx, `os-h os-h${p.level}`)}>${esc(text)}</h${p.level}>`;
+    }
+    case "categoryNav": {
+      const cats = ctx.data.categories ?? [];
+      const cur = ctx.data.category?.slug ?? "";
+      const link = (href: string, label: string, on: boolean) => `<a href="${href}"${on ? ' class="on" aria-current="page"' : ""}>${esc(label)}</a>`;
+      return `<nav ${root(n, ctx, `os-cnav os-cnav--${p.layout}`)} aria-label="Categories">${link("/shop", "All", !cur)}${cats.map((c) => link(`/shop/category/${encodeURIComponent(c.slug)}`, c.name, c.slug === cur)).join("")}</nav>`;
     }
     default:
       throw new Error(`Unknown widget: ${n.type}`);
@@ -114,13 +155,17 @@ function withDefaults(doc: PageDoc): PageDoc {
   };
 }
 
+const stripUndefined = (o: RenderContext): RenderContext => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as RenderContext;
+
 export interface RenderedParts { head: string; css: string; body: string }
 
 /** Head tags + CSS + body markup separately, so the editor can swap them in place without reloading its iframe. */
 export function renderParts(input: PageDoc, opts: RenderOptions = {}): RenderedParts {
   const doc = withDefaults(normalizeDoc(input));
   const theme = normTheme(doc.theme);
-  const ctx: Ctx = { editor: !!opts.editor, theme, opts };
+  const sample = !!opts.editor || !!opts.sample;
+  const data: RenderContext = { ...(sample ? SAMPLE_CTX : {}), ...stripUndefined(opts.context ?? {}) };
+  const ctx: Ctx = { editor: !!opts.editor, theme, opts, data };
   const flat: Node[] = [];
   const walk = (ns: Node[]) => ns.forEach((n) => { flat.push(n); if (n.children) walk(n.children); });
   walk(doc.nodes);

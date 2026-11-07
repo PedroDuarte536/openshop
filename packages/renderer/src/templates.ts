@@ -14,19 +14,27 @@ export function cloneWithNewIds(n: Node): Node {
   return { ...structuredClone(n), id: uid(), ...(n.children ? { children: n.children.map(cloneWithNewIds) } : {}) };
 }
 
-export const WIDGETS: { type: WidgetType; label: string; icon: IconKey; hint: string }[] = [
-  { type: "heading", label: "Heading", icon: "star", hint: "Big, bold titles" },
-  { type: "text", label: "Text", icon: "check", hint: "Paragraphs" },
-  { type: "image", label: "Image", icon: "gift", hint: "Photo or artwork" },
-  { type: "button", label: "Button", icon: "bolt", hint: "Link with style" },
-  { type: "iconBox", label: "Icon box", icon: "sparkle", hint: "Feature with icon" },
-  { type: "stat", label: "Stat", icon: "clock", hint: "Number + label" },
-  { type: "testimonial", label: "Testimonial", icon: "heart", hint: "Customer quote" },
-  { type: "faq", label: "FAQ", icon: "smile", hint: "Expandable answers" },
-  { type: "gallery", label: "Gallery", icon: "leaf", hint: "Image grid" },
-  { type: "productGrid", label: "Products", icon: "cart", hint: "Live from your catalogue" },
-  { type: "divider", label: "Divider", icon: "globe", hint: "A quiet line" },
-  { type: "spacer", label: "Spacer", icon: "package", hint: "Breathing room" },
+export const WIDGETS: { type: WidgetType; label: string; icon: IconKey; hint: string; group: "basic" | "shop" }[] = [
+  { type: "heading", label: "Heading", icon: "star", hint: "Big, bold titles", group: "basic" },
+  { type: "text", label: "Text", icon: "check", hint: "Paragraphs", group: "basic" },
+  { type: "image", label: "Image", icon: "gift", hint: "Photo or artwork", group: "basic" },
+  { type: "button", label: "Button", icon: "bolt", hint: "Link with style", group: "basic" },
+  { type: "iconBox", label: "Icon box", icon: "sparkle", hint: "Feature with icon", group: "basic" },
+  { type: "stat", label: "Stat", icon: "clock", hint: "Number + label", group: "basic" },
+  { type: "testimonial", label: "Testimonial", icon: "heart", hint: "Customer quote", group: "basic" },
+  { type: "faq", label: "FAQ", icon: "smile", hint: "Expandable answers", group: "basic" },
+  { type: "gallery", label: "Gallery", icon: "leaf", hint: "Image grid", group: "basic" },
+  { type: "productGrid", label: "Products", icon: "cart", hint: "Live from your catalogue", group: "basic" },
+  { type: "divider", label: "Divider", icon: "globe", hint: "A quiet line", group: "basic" },
+  { type: "spacer", label: "Spacer", icon: "package", hint: "Breathing room", group: "basic" },
+  { type: "productTitle", label: "Product name", icon: "star", hint: "On product pages", group: "shop" },
+  { type: "productPrice", label: "Product price", icon: "gift", hint: "On product pages", group: "shop" },
+  { type: "productDescription", label: "Description", icon: "check", hint: "On product pages", group: "shop" },
+  { type: "productGallery", label: "Product photos", icon: "leaf", hint: "On product pages", group: "shop" },
+  { type: "addToCart", label: "Add to cart", icon: "cart", hint: "On product pages", group: "shop" },
+  { type: "dynamicTitle", label: "Page title", icon: "bolt", hint: "Category or search name", group: "shop" },
+  { type: "searchBox", label: "Search box", icon: "globe", hint: "Find products", group: "shop" },
+  { type: "categoryNav", label: "Categories", icon: "sparkle", hint: "Browse by category", group: "shop" },
 ];
 
 export function newWidget(type: WidgetType): Node {
@@ -43,6 +51,14 @@ export function newWidget(type: WidgetType): Node {
     case "productGrid": return w("productGrid", { limit: 4, cols: 4 });
     case "divider": return w("divider");
     case "spacer": return w("spacer", {}, { minH: 48 });
+    case "productTitle": return w("productTitle", { level: 1 });
+    case "productPrice": return w("productPrice");
+    case "productDescription": return w("productDescription");
+    case "productGallery": return w("productGallery", { ratio: "4/5" });
+    case "addToCart": return w("addToCart", { label: "Add to cart", qty: true });
+    case "searchBox": return w("searchBox");
+    case "dynamicTitle": return w("dynamicTitle", { source: "category", level: 1 });
+    case "categoryNav": return w("categoryNav", { layout: "pills" });
   }
 }
 
@@ -60,7 +76,7 @@ export interface SectionTemplate { key: string; name: string; build: () => Node 
 export const SECTION_TEMPLATES: SectionTemplate[] = [
   { key: "header", name: "Header", build: () => sec([
       col(4, [w("heading", { text: BRAND, level: 4 }, { weight: 800, size: 22 })], { valign: "center" }),
-      col(8, [btn("Shop", "/shop", "ghost", "sm"), btn("Cart", "/shop/cart", "ghost", "sm"), btn("Visit the studio", "#", "solid", "sm")], { dir: "row", align: "right", gap: 6 }),
+      col(8, [btn("Shop", "/shop", "ghost", "sm"), btn("Search", "/search", "ghost", "sm"), btn("Cart", "/shop/cart", "ghost", "sm"), btn("Visit the studio", "#", "solid", "sm")], { dir: "row", align: "right", gap: 6 }),
     ], { padT: 18, padB: 18 }) },
   { key: "hero-split", name: "Hero, split", build: () => sec([
       col(7, [
@@ -132,6 +148,37 @@ export const PAGE_TEMPLATES: PageTemplate[] = [
   { key: "ceramics", name: "Ceramics shop", blurb: "Warm, editorial home page", theme: THEMES.moss.theme, build: () => pick("header", "hero-split", "features", "products", "split", "testimonials", "cta", "footer") },
   { key: "drop", name: "Product drop", blurb: "Dark, bold launch page", theme: THEMES.plum.theme, build: () => pick("header", "hero-cover", "stats", "products", "faq", "cta", "footer") },
   { key: "blank", name: "Blank", blurb: "Start from nothing", theme: THEMES.cobalt.theme, build: () => [newSection([12])] },
+];
+
+export interface SystemPage { key: "product" | "category" | "search"; name: string; blurb: string; build: () => Node[] }
+const hdr = () => SECTION_TEMPLATES.find((t) => t.key === "header")!.build();
+const ftr = () => SECTION_TEMPLATES.find((t) => t.key === "footer")!.build();
+const results = (limit = 24) => sec([col(12, [w("productGrid", { source: "results", limit, cols: 4 })])], { padT: 24 });
+
+/** The pages every shop needs. They are designed once and reused for every product, category and search. */
+export const SYSTEM_PAGES: SystemPage[] = [
+  { key: "product", name: "Product page", blurb: "How every product is shown", build: () => [
+      hdr(),
+      sec([
+        col(6, [w("productGallery", { ratio: "4/5" })]),
+        col(6, [w("productTitle", { level: 1 }, { size: 52 }), w("productPrice"), w("productDescription", {}, { size: 18 }), w("addToCart")], { valign: "center", gap: 22 }),
+      ], { padT: 56, padB: 72 }),
+      sec([col(12, [w("heading", { text: "You may also like", level: 3 })]), col(12, [w("productGrid", { limit: 4, cols: 4 })])], { bg: { kind: "color", color: "var(--surface)" }, padT: 64, padB: 72 }),
+      ftr(),
+  ] },
+  { key: "category", name: "Category page", blurb: "How a category or the whole shop is listed", build: () => [
+      hdr(),
+      sec([col(7, [w("dynamicTitle", { source: "category", level: 1 }, { size: 60 })], { valign: "center" }), col(5, [w("searchBox")], { valign: "center" })], { padT: 56, padB: 8 }),
+      sec([col(12, [w("categoryNav")])], { padT: 16, padB: 8 }),
+      results(),
+      ftr(),
+  ] },
+  { key: "search", name: "Search results", blurb: "What people see after searching", build: () => [
+      hdr(),
+      sec([col(12, [w("dynamicTitle", { source: "search", level: 1 }, { size: 56 }), w("searchBox")], { gap: 20 })], { padT: 56, padB: 8 }),
+      results(),
+      ftr(),
+  ] },
 ];
 
 export const buildDoc = (t: PageTemplate, title: string): PageDoc => ({ title, theme: t.theme, nodes: t.build() });

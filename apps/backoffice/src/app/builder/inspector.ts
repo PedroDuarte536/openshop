@@ -6,7 +6,7 @@ import type { Background, Device, IconKey, Node, Style } from '@openshop/rendere
 import { ApiService, Category } from '../api.service';
 import { BuilderStore, NAMES } from './store';
 import { OsColor, OsSeg, OsSlider, OsSwitch } from './controls';
-import { ARTS, ICONS, PROP_FIELDS, Field } from './schema';
+import { ARTS, ICONS, NOTES, PROP_FIELDS, Field } from './schema';
 
 const SIZE_TYPES = ['heading', 'text', 'button', 'iconBox', 'stat', 'testimonial', 'faq'];
 const WEIGHT_TYPES = ['heading', 'text', 'button', 'iconBox', 'stat'];
@@ -88,9 +88,10 @@ const DEVICES: { v: Device; label: string }[] = [{ v: 'desktop', label: 'Desktop
           </section>
         } @else if (n.type === 'column') {
           <p class="note">Drag widgets from the left into this column, or click one to add it here.</p>
-        } @else if (fields().length === 0) {
+        } @else if (fields().length === 0 && !note()) {
           <p class="note">Nothing to edit here. Use the Style tab for size and spacing.</p>
         }
+        @if (note()) { <p class="note shopnote">{{ note() }}</p> }
         @for (f of fields(); track f.key) { <ng-container [ngTemplateOutlet]="fieldTpl" [ngTemplateOutletContext]="{ f: f, base: '', node: n }" /> }
       } @else {
         <div class="devbanner">
@@ -286,6 +287,7 @@ export class Inspector {
   uploadError = signal('');
   sel = this.store.selected;
   theme = computed(() => this.store.doc().theme);
+  note = computed(() => { const n = this.sel(); return n ? NOTES[n.type] ?? '' : ''; });
   fields = computed<Field[]>(() => { const n = this.sel(); return n ? PROP_FIELDS[n.type] : []; });
   private icoCache = new Map<string, SafeHtml>();
 

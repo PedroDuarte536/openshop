@@ -3,7 +3,11 @@
 
 export type Device = "desktop" | "tablet" | "mobile";
 export const DEVICES: Device[] = ["desktop", "tablet", "mobile"];
-export const WIDGET_TYPES = ["heading", "text", "image", "button", "spacer", "divider", "iconBox", "stat", "testimonial", "faq", "gallery", "productGrid"] as const;
+export const WIDGET_TYPES = [
+  "heading", "text", "image", "button", "spacer", "divider", "iconBox", "stat", "testimonial", "faq", "gallery", "productGrid",
+  // bound to the shop: they show real data on product / category / search pages and sample data in the editor
+  "productTitle", "productPrice", "productDescription", "productGallery", "addToCart", "searchBox", "dynamicTitle", "categoryNav",
+] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
 export type NodeType = "section" | "column" | WidgetType;
 export const FONT_KEYS = ["editorial", "grotesk", "poster", "classic"] as const;
@@ -44,9 +48,16 @@ export interface Theme {
 
 export interface PageDoc { title: string; theme?: Partial<Theme>; nodes: Node[] }
 export interface ProductCard { id?: string; name: string; price: number; image?: string; href?: string }
+export interface ProductCtx { id: string; name: string; price: number; description?: string; images?: string[]; stock?: number }
+export interface CategoryRef { name: string; slug: string }
+/** Data for the shop-bound widgets. In the editor (or with `sample`) anything missing is filled with sample data. */
+export interface RenderContext { product?: ProductCtx; category?: CategoryRef; query?: string; categories?: CategoryRef[]; results?: ProductCard[] }
 export interface RenderOptions {
   /** Adds data-node / data-edit attributes and drop placeholders for the visual editor. */
   editor?: boolean;
+  /** Fill missing context with sample data without the editor hooks (used for thumbnails). */
+  sample?: boolean;
+  context?: RenderContext;
   /** Supplies products for a productGrid node. Without it, sample products are shown. */
   products?: (node: Node) => ProductCard[];
 }
@@ -150,7 +161,14 @@ function normProps(type: NodeType, raw: unknown): Record<string, unknown> {
       items: items(p.items, 24).map((i) => ({ src: safeImage(i.src), alt: str(i.alt, 300), art: i.art ? pick(i.art, ART_KEYS, "aurora") : "" })),
       cols: Math.round(num(p.cols, 2, 6) ?? 4), ratio: pick(p.ratio, RATIOS, "1/1"),
     };
-    case "productGrid": return { categoryId: str(p.categoryId, 64), limit: Math.round(num(p.limit, 1, 24) ?? 4), cols: Math.round(num(p.cols, 2, 5) ?? 4) };
+    case "productGrid": return { categoryId: str(p.categoryId, 64), limit: Math.round(num(p.limit, 1, 48) ?? 4), cols: Math.round(num(p.cols, 2, 5) ?? 4), source: pick(p.source, ["catalogue", "results"] as const, "catalogue") };
+    case "productTitle": return { level: Math.round(num(p.level, 1, 3) ?? 1) };
+    case "productPrice": case "productDescription": return {};
+    case "productGallery": return { ratio: pick(p.ratio, RATIOS, "4/5") };
+    case "addToCart": return { label: str(p.label, 60, "Add to cart"), qty: bool(p.qty, true) };
+    case "searchBox": return { placeholder: str(p.placeholder, 80, "Search the shop"), button: str(p.button, 40, "Search") };
+    case "dynamicTitle": return { source: pick(p.source, ["category", "search"] as const, "category"), level: Math.round(num(p.level, 1, 3) ?? 1) };
+    case "categoryNav": return { layout: pick(p.layout, ["pills", "list"] as const, "pills") };
   }
 }
 

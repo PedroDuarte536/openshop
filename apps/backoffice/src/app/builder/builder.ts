@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
 import { SECTION_TEMPLATES, renderParts } from '@openshop/renderer';
 import type { Device, Node, ProductCard } from '@openshop/renderer';
-import { ApiService, Product } from '../api.service';
+import { ApiService, Product, Category } from '../api.service';
 import { BuilderStore } from './store';
 import { Palette } from './palette';
 import { Inspector } from './inspector';
@@ -44,7 +44,7 @@ declare global { interface Window { osBuilderHost?: unknown } }
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
           <span class="status" [class.warn]="status() === 'error'">{{ statusText() }}</span>
-          @if (slug() && !store.dirty() && status() === 'saved') { <a class="live" [href]="'/s/' + slug()" target="_blank" rel="noopener">View live page</a> }
+          @if (!systemLabel() && slug() && !store.dirty() && status() === 'saved') { <a class="live" [href]="'/s/' + slug()" target="_blank" rel="noopener">View live page</a> }
           <button class="publish" (click)="save()" [disabled]="status() === 'saving'">{{ status() === 'saving' ? 'Publishing…' : 'Publish' }}</button>
         </div>
       </header>
@@ -53,7 +53,10 @@ declare global { interface Window { osBuilderHost?: unknown } }
 
       <section class="stage-wrap" #wrap (click)="onBackdrop($event)">
         <div class="stage" [style.width.px]="stageW()">
-          <div class="chrome"><span></span><span></span><span></span><em>{{ '/s/' + (slug() || 'page') }}</em><small>{{ WIDTH[store.device()] }}px</small></div>
+          <div class="chrome"><span></span><span></span><span></span>
+            @if (systemLabel()) { <em class="sys" title="This page has a fixed address">{{ systemLabel() }}</em> }
+            @else { <label class="addr" title="The web address of this page"><b>/s/</b><input [value]="slug()" (input)="onSlug($any($event.target).value)" spellcheck="false" aria-label="Page address"></label> }
+            <small>{{ WIDTH[store.device()] }}px</small></div>
           <div class="vp" [style.height.px]="vpH()">
             <iframe #frame title="Page canvas" [style.width.px]="WIDTH[store.device()]" [style.height.px]="vpH() / scale()" [style.transform]="'scale(' + scale() + ')'" (load)="onLoad()"></iframe>
           </div>
@@ -75,6 +78,10 @@ export class Builder implements OnInit, OnDestroy {
   WIDTH = WIDTH;
   doc = this.store.doc;
   slug = signal('');
+  system = signal<string | null>(null);
+  errorMsg = signal('');
+  cats = signal<Category[]>([]);
+  systemLabel = computed(() => ({ product: 'Product page · every product', category: 'Category page · every category', search: 'Search page · every search' } as Record<string, string>)[this.system() ?? ''] ?? '');
   status = signal<'idle' | 'saving' | 'saved' | 'error'>('idle');
   products = signal<Product[]>([]);
   ready = signal(false);
@@ -89,7 +96,7 @@ export class Builder implements OnInit, OnDestroy {
   scale = computed(() => Math.min(1, (this.avail().w - 64) / WIDTH[this.store.device()]));
   stageW = computed(() => Math.round(WIDTH[this.store.device()] * this.scale()));
   vpH = computed(() => Math.max(300, this.avail().h - 40 - 56));
-  statusText = computed(() => ({ idle: this.store.dirty() ? 'Unpublished changes' : 'Up to date', saving: 'Publishing…', saved: this.store.dirty() ? 'Unpublished changes' : 'Published', error: 'Could not publish' })[this.status()]);
+  statusText = computed(() => ({ idle: this.store.dirty() ? 'Unpublished changes' : 'Up to date', saving: 'Publishing…', saved: this.store.dirty() ? 'Unpublished changes' : 'Published', error: this.errorMsg() || 'Could not publish' })[this.status()]);
 
   private lastHead = '';
   private lastBody = '';
@@ -108,7 +115,7 @@ export class Builder implements OnInit, OnDestroy {
   private parts = computed(() => {
     const preview = this.store.preview();
     const catalogue = this.products().length > 0;
-    try { return renderParts(this.store.doc(), { editor: !preview, products: catalogue ? this.resolver() : undefined }); } catch { return null; }
+    try { return renderParts(this.store.doc(), { editor: !preview, products: catalogue ? this.resolver() : undefined, context: this.cats().length ? { categories: this.cats().map((c) => ({ name: c.name, slug: c.slug })) } : undefined }); } catch { return null; }
   });
 
   constructor() {
@@ -130,7 +137,8 @@ export class Builder implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.frame.nativeElement.srcdoc = SKELETON;
-    this.api.page(this.id()).subscribe((p) => { this.slug.set(p.slug); this.store.load({ title: p.title, theme: p.theme, nodes: p.nodes ?? [] }); });
+    this.api.categories().subscribe({ next: (c) => this.cats.set(c), error: () => {} });
+    this.api.page(this.id()).subscribe((p) => { this.slug.set(p.slug); this.system.set(p.system ?? null); this.store.load({ title: p.title, theme: p.theme, nodes: p.nodes ?? [] }); });
     this.api.products().subscribe({ next: (p) => this.products.set(p), error: () => {} });
     this.resize = new ResizeObserver(([e]) => this.avail.set({ w: e.contentRect.width, h: e.contentRect.height }));
     this.resize.observe(this.wrap.nativeElement);
@@ -191,15 +199,22 @@ export class Builder implements OnInit, OnDestroy {
     if (this.onKey({ key: e.key, mod: e.ctrlKey || e.metaKey, shift: e.shiftKey })) e.preventDefault();
   }
 
+  onSlug(v: string) {
+    const clean = v.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+/, '').slice(0, 80);
+    if (clean === this.slug()) return;
+    this.slug.set(clean); this.store.dirty.set(true); this.status.set('idle'); this.errorMsg.set('');
+  }
+
   onBackdrop(e: MouseEvent) { if ((e.target as HTMLElement).classList.contains('stage-wrap')) this.store.select(null); }
 
   save() {
     if (this.status() === 'saving') return;
     const d = this.store.doc();
-    this.status.set('saving');
+    if (!this.systemLabel() && !this.slug()) { this.status.set('error'); this.errorMsg.set('Give the page an address first'); return; }
+    this.status.set('saving'); this.errorMsg.set('');
     this.api.savePage(this.id(), { slug: this.slug(), title: d.title, theme: d.theme, nodes: d.nodes }).subscribe({
       next: () => { this.store.markSaved(); this.status.set('saved'); },
-      error: () => this.status.set('error'),
+      error: (e) => { this.status.set('error'); this.errorMsg.set(e.status === 409 ? 'That address is already used by another page' : ''); },
     });
   }
 }

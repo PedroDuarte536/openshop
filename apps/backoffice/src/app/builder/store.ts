@@ -10,6 +10,8 @@ export const kindOf = (t: NodeType): Kind => (t === 'section' ? 'section' : t ==
 export const NAMES: Record<NodeType, string> = {
   section: 'Section', column: 'Column', heading: 'Heading', text: 'Text', image: 'Image', button: 'Button', spacer: 'Spacer', divider: 'Divider',
   iconBox: 'Icon box', stat: 'Stat', testimonial: 'Testimonial', faq: 'FAQ', gallery: 'Gallery', productGrid: 'Products',
+  productTitle: 'Product name', productPrice: 'Price', productDescription: 'Description', productGallery: 'Product photos', addToCart: 'Add to cart',
+  searchBox: 'Search box', dynamicTitle: 'Page title', categoryNav: 'Categories',
 };
 
 interface Loc { list: Node[]; index: number; parent: Node | null }

@@ -13,6 +13,7 @@ PrestaShop alternative. Monorepo (npm workspaces), TypeScript, Node 22+.
 - Public storefront with no JavaScript: `/shop`, product pages, cookie-based cart, checkout, order confirmation. Pages get a strict CSP.
 - Visual page builder: sections > columns > 12 widgets, drag and drop on a live canvas, inline text editing, layers, undo/redo, tablet and mobile views with per-device style overrides, themes (colours, 4 font pairings), 12 ready-made sections and 3 page templates. The canvas shows the exact HTML the renderer publishes.
 - Pages are saved as a validated document and rendered to static HTML and CSS on save (no JS, scroll animations are CSS-only). Product grids are filled from the catalogue and re-rendered whenever products or categories change. `/` serves the page with slug `home`; the shop picks up its theme.
+- Essential pages (product, category, search) are designed in the builder like any page and filled with real data on every request; the editor shows sample data. The shop (`/shop`, `/shop/category/:slug`, `/search`, `/shop/product/:id`) uses them. Page addresses can be changed from the Pages list or the builder's address bar.
 - Every style value is validated in `packages/renderer` (colours, URLs, numbers, ids), so a hostile document can't inject HTML or CSS.
 - Orders take prices from the catalogue only; stock is checked and decremented under a lock. No payment gateway: orders start as `pending` and are marked paid by hand.
 

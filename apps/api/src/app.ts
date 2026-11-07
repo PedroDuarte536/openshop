@@ -4,7 +4,7 @@ import type { DataStore } from "@openshop/db";
 import { openDb, type Category, type Order, type Product } from "./types.ts";
 import { signToken, verifyPassword, verifyToken } from "./auth.ts";
 import { OrderError, placeOrder } from "./orders.ts";
-import { renderStored, rerenderDynamicPages } from "./pages.ts";
+import { ensureSystemPages, renderStored, rerenderDynamicPages } from "./pages.ts";
 import { registerUploadParsers, registerUploadRead, saveUpload } from "./uploads.ts";
 import { PAGE_CSP, registerStorefront } from "./storefront.ts";
 
@@ -138,20 +138,43 @@ export function buildApp(store: DataStore, opts: AppOptions = {}) {
       const { doc, html } = await renderStored(db, { title: b.title, theme: b.theme, nodes: b.nodes });
       return { slug: b.slug, title: doc.title, theme: doc.theme!, nodes: doc.nodes, html };
     };
-    admin.get("/api/pages", async () => (await db.pages.find({}, { sort: { slug: 1 } })).map(({ html: _h, nodes: _n, ...p }) => p));
+    admin.get("/api/pages", async () => {
+      await ensureSystemPages(db);
+      return (await db.pages.find({}, { sort: { slug: 1 } })).map(({ html: _h, nodes: _n, ...p }) => p);
+    });
     admin.get<{ Params: { id: string } }>("/api/pages/:id", async (req, reply) => (await db.pages.get(req.params.id)) ?? notFound(reply));
     admin.post("/api/pages", { schema: { body: pageSchema } }, async (req, reply) => {
       const b = req.body as PageBody;
-      if (await db.pages.count({ slug: b.slug })) return reply.code(409).send({ error: "slug exists" });
+      if (await db.pages.count({ slug: b.slug })) return reply.code(409).send({ error: "That address is already used by another page" });
       try { return reply.code(201).send(await db.pages.insert(await save(b))); }
       catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
     });
     admin.put<{ Params: { id: string } }>("/api/pages/:id", { schema: { body: pageSchema } }, async (req, reply) => {
       const b = req.body as PageBody;
-      const [clash] = await db.pages.find({ slug: b.slug }, { limit: 1 });
-      if (clash && clash.id !== req.params.id) return reply.code(409).send({ error: "slug exists" });
-      try { return (await db.pages.update(req.params.id, await save(b))) ?? notFound(reply); }
+      const cur = await db.pages.get(req.params.id);
+      if (!cur) return notFound(reply);
+      const slug = cur.system ? cur.slug : b.slug; // essential pages keep their fixed address
+      const [clash] = await db.pages.find({ slug }, { limit: 1 });
+      if (clash && clash.id !== cur.id) return reply.code(409).send({ error: "That address is already used by another page" });
+      try { return (await db.pages.update(cur.id, { ...(await save(b)), slug })) ?? notFound(reply); }
       catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    });
+    // Quick edits from the pages list: change the address or title without opening the builder.
+    admin.patch<{ Params: { id: string } }>("/api/pages/:id", { schema: { body: { type: "object", additionalProperties: false, properties: { slug: { type: "string", pattern: "^[a-z0-9-]+$", maxLength: 80 }, title: { type: "string", minLength: 1, maxLength: 200 } } } } }, async (req, reply) => {
+      const cur = await db.pages.get(req.params.id);
+      if (!cur) return notFound(reply);
+      if (cur.system) return reply.code(400).send({ error: "Essential pages have a fixed address" });
+      const b = req.body as { slug?: string; title?: string };
+      if (b.slug && b.slug !== cur.slug && (await db.pages.count({ slug: b.slug }))) return reply.code(409).send({ error: "That address is already used by another page" });
+      const { html: _h, nodes: _n, ...rest } = (await db.pages.update(cur.id, b))!;
+      return rest;
+    });
+    admin.delete<{ Params: { id: string } }>("/api/pages/:id", async (req, reply) => {
+      const cur = await db.pages.get(req.params.id);
+      if (!cur) return notFound(reply);
+      if (cur.system) return reply.code(400).send({ error: "Essential pages can't be deleted" });
+      await db.pages.delete(cur.id);
+      return reply.code(204).send();
     });
   });
 
@@ -160,12 +183,12 @@ export function buildApp(store: DataStore, opts: AppOptions = {}) {
   registerStorefront(app, db);
   const CSP = PAGE_CSP;
   const servePage = async (slug: string, reply: FastifyReply) => {
-    const [page] = await db.pages.find({ slug }, { limit: 1 });
+    const [page] = await db.pages.find({ slug, system: null }, { limit: 1 });
     if (!page) return reply.code(404).header("content-security-policy", CSP).type("text/html").send("<h1>Not found</h1>");
     return reply.header("cache-control", "public, max-age=60").header("content-security-policy", CSP).type("text/html").send(page.html);
   };
   app.get<{ Params: { slug: string } }>("/s/:slug", (req, reply) => servePage(req.params.slug, reply));
-  app.get("/", async (_req, reply) => ((await db.pages.count({ slug: "home" })) ? servePage("home", reply) : reply.redirect("/shop")));
+  app.get("/", async (_req, reply) => ((await db.pages.count({ slug: "home", system: null })) ? servePage("home", reply) : reply.redirect("/shop")));
 
   return app;
 }

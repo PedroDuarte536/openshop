@@ -3,7 +3,7 @@ import type { Node, Theme } from "@openshop/renderer";
 
 export interface Product extends Doc { name: string; price: number; active: boolean; stock: number; categoryId?: string | null; description?: string; images?: string[] }
 export interface Category extends Doc { name: string; slug: string }
-export interface Page extends Doc { slug: string; title: string; theme: Theme; nodes: Node[]; html: string }
+export interface Page extends Doc { slug: string; title: string; theme: Theme; nodes: Node[]; html: string; system?: "product" | "category" | "search" | null }
 export interface OrderLine { productId: string; name: string; price: number; qty: number }
 export interface Order extends Doc {
   lines: OrderLine[]; total: number; status: "pending" | "paid" | "shipped" | "cancelled";

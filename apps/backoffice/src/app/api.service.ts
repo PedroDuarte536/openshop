@@ -6,7 +6,8 @@ import type { Node, Theme } from '@openshop/renderer';
 export interface Product { id: string; name: string; price: number; active: boolean; stock: number; categoryId?: string | null; description?: string; images?: string[] }
 export interface Category { id: string; name: string; slug: string }
 export interface Order { id: string; total: number; status: string; createdAt: string; customer: { name: string; email: string; address: string }; lines: { name: string; qty: number; price: number }[] }
-export interface PageSummary { id: string; slug: string; title: string; theme?: Theme; nodes?: Node[] }
+export type SystemKey = 'product' | 'category' | 'search';
+export interface PageSummary { id: string; slug: string; title: string; theme?: Theme; nodes?: Node[]; system?: SystemKey | null }
 export interface PageInput { slug: string; title: string; theme?: Partial<Theme>; nodes: Node[] }
 export type ProductInput = Omit<Product, 'id'>;
 
@@ -33,6 +34,8 @@ export class ApiService {
   pages = () => this.http.get<PageSummary[]>('/api/pages');
   page = (id: string) => this.http.get<PageSummary>(`/api/pages/${id}`);
   createPage = (p: PageInput) => this.http.post<PageSummary>('/api/pages', p);
+  patchPage = (id: string, p: { slug?: string; title?: string }) => this.http.patch<PageSummary>(`/api/pages/${id}`, p);
+  deletePage = (id: string) => this.http.delete<void>(`/api/pages/${id}`);
   savePage = (id: string, p: PageInput) => this.http.put<PageSummary>(`/api/pages/${id}`, p);
 }
 

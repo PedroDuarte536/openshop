@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderPage, renderParts, normalizeDoc, SECTION_TEMPLATES, PAGE_TEMPLATES, buildDoc, newWidget, WIDGET_TYPES, newSection, uid } from "../src/index.ts";
+import { renderPage, renderParts, normalizeDoc, SECTION_TEMPLATES, PAGE_TEMPLATES, SYSTEM_PAGES, buildDoc, newWidget, WIDGET_TYPES, newSection, uid } from "../src/index.ts";
 import type { PageDoc } from "../src/index.ts";
 
 const doc = (nodes: any[], extra: object = {}): PageDoc => ({ title: "T", nodes, ...extra }) as PageDoc;
@@ -108,4 +108,33 @@ test("heading size is fluid on desktop but exact in device overrides", () => {
   const { css } = renderParts(d);
   assert.match(css, /\.n-w1\{font-size:clamp\(40px,6\.25vw,80px\)\}/);
   assert.match(css, /\.n-w1\{font-size:44px\}/);
+});
+
+test("system pages render with sample data in the editor and real data when given", () => {
+  for (const p of SYSTEM_PAGES) assert.doesNotThrow(() => renderPage({ title: p.name, nodes: p.build() }, { editor: true }), p.key);
+  const prod = SYSTEM_PAGES.find((p) => p.key === "product")!;
+  const sample = renderPage({ title: "t", nodes: prod.build() }, { editor: true });
+  assert.match(sample, /Linen mug/);
+  assert.match(sample, /action="\/shop\/cart\/add"/);
+  const real = renderPage({ title: "t", nodes: prod.build() }, { products: () => [], context: { product: { id: "p1", name: "<b>Real</b> cup", price: 9.5, stock: 3, description: "Nice", images: [] } } });
+  assert.match(real, /&lt;b&gt;Real&lt;\/b&gt; cup/);
+  assert.match(real, /name="productId" value="p1"/);
+  assert.doesNotMatch(real, /Linen mug/);
+  assert.doesNotMatch(real, /data-node/);
+  const none = renderPage({ title: "t", nodes: prod.build() }); // normal page: no product context, widgets render nothing
+  assert.doesNotMatch(none, /class="[^"]*os-(pgal|atc|price)/);
+});
+
+test("search results page escapes the query and shows an empty state", () => {
+  const search = SYSTEM_PAGES.find((p) => p.key === "search")!;
+  const html = renderPage({ title: "t", nodes: search.build() }, { context: { query: '"><script>alert(1)</script>', results: [] } });
+  assert.doesNotMatch(html, /<script>alert/);
+  assert.match(html, /Nothing matches/);
+  assert.match(html, /name="q" value="&quot;&gt;&lt;script&gt;/);
+});
+
+test("category nav links are encoded and the current category is marked", () => {
+  const html = renderPage(page({ id: "n1", type: "categoryNav", props: {} }), { context: { categories: [{ name: "A&B", slug: "a-b" }, { name: "C", slug: "c" }], category: { name: "C", slug: "c" } } });
+  assert.match(html, /href="\/shop\/category\/a-b">A&amp;B/);
+  assert.match(html, /class="on" aria-current="page">C/);
 });
