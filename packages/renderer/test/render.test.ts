@@ -102,3 +102,10 @@ test("dark backgrounds switch text to light automatically", () => {
   const light = doc([{ id: "s1", type: "section", style: { bg: { kind: "color", color: "#ffffff" } }, children: [] }]);
   assert.doesNotMatch(renderPage(light), /class="[^"]*os-dark/);
 });
+
+test("heading size is fluid on desktop but exact in device overrides", () => {
+  const d = page({ id: "w1", type: "heading", props: {}, style: { size: 80 }, responsive: { mobile: { size: 44 } } });
+  const { css } = renderParts(d);
+  assert.match(css, /\.n-w1\{font-size:clamp\(40px,6\.25vw,80px\)\}/);
+  assert.match(css, /\.n-w1\{font-size:44px\}/);
+});

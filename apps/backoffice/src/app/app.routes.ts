@@ -3,7 +3,7 @@ import { Products } from './products';
 import { Categories } from './categories';
 import { Orders } from './orders';
 import { Pages } from './pages';
-import { Builder } from './builder';
+import { Builder } from './builder/builder';
 import { Login, authGuard } from './auth';
 
 export const routes: Routes = [

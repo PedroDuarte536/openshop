@@ -1,12 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { tap } from 'rxjs';
-import type { Block } from '@openshop/renderer';
+import type { Node, Theme } from '@openshop/renderer';
 
 export interface Product { id: string; name: string; price: number; active: boolean; stock: number; categoryId?: string | null; description?: string; images?: string[] }
 export interface Category { id: string; name: string; slug: string }
 export interface Order { id: string; total: number; status: string; createdAt: string; customer: { name: string; email: string; address: string }; lines: { name: string; qty: number; price: number }[] }
-export interface PageSummary { id: string; slug: string; title: string; blocks: Block[] }
+export interface PageSummary { id: string; slug: string; title: string; theme?: Theme; nodes?: Node[] }
+export interface PageInput { slug: string; title: string; theme?: Partial<Theme>; nodes: Node[] }
 export type ProductInput = Omit<Product, 'id'>;
 
 const KEY = 'openshop.token';
@@ -31,8 +32,8 @@ export class ApiService {
   setOrderStatus = (id: string, status: string) => this.http.patch<Order>(`/api/orders/${id}`, { status });
   pages = () => this.http.get<PageSummary[]>('/api/pages');
   page = (id: string) => this.http.get<PageSummary>(`/api/pages/${id}`);
-  createPage = (p: { slug: string; title: string; blocks: Block[] }) => this.http.post<PageSummary>('/api/pages', p);
-  savePage = (id: string, p: { slug: string; title: string; blocks: Block[] }) => this.http.put<PageSummary>(`/api/pages/${id}`, p);
+  createPage = (p: PageInput) => this.http.post<PageSummary>('/api/pages', p);
+  savePage = (id: string, p: PageInput) => this.http.put<PageSummary>(`/api/pages/${id}`, p);
 }
 
 function read() { try { return localStorage.getItem(KEY); } catch { return null; } }

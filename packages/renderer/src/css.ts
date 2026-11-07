@@ -55,7 +55,8 @@ const ALIGN_ITEMS = { top: "start", center: "center", bottom: "end" } as const;
 const ALIGN_FLEX = { left: "flex-start", center: "center", right: "flex-end" } as const;
 
 /** CSS rules for one node at one device. `.n-ID` is the node's own class. */
-export function nodeRules(node: Node, st: Style): string {
+/** `fluid` scales headings with the viewport (desktop base only). Explicit tablet/mobile sizes are exact px. */
+export function nodeRules(node: Node, st: Style, fluid = false): string {
   const c = `.n-${node.id}`;
   const main: string[] = [], inner: string[] = [], grid: string[] = [];
   const isSection = node.type === "section", isCol = node.type === "column";
@@ -70,7 +71,7 @@ export function nodeRules(node: Node, st: Style): string {
   if (st.align && node.type === "button") main.push(`justify-content:${ALIGN_FLEX[st.align]}`);
   if (st.weight) main.push(`font-weight:${st.weight}`);
   if (st.size) {
-    if (node.type === "heading") main.push(`font-size:clamp(${Math.max(18, Math.round(st.size * 0.5))}px,${(st.size / 14).toFixed(2)}vw,${st.size}px)`);
+    if (node.type === "heading" && fluid) main.push(`font-size:clamp(${Math.max(18, Math.round(st.size * 0.5))}px,${(st.size / 12.8).toFixed(2)}vw,${st.size}px)`);
     else main.push(`font-size:${st.size}px`);
   }
   if (typeof st.minH === "number") {
@@ -205,7 +206,7 @@ export function responsiveBlocks(nodes: Node[]): string {
   const flat: Node[] = [];
   const walk = (ns: Node[]) => ns.forEach((n) => { flat.push(n); if (n.children) walk(n.children); });
   walk(nodes);
-  const desktop = flat.map((n) => nodeRules(n, n.style)).join("");
+  const desktop = flat.map((n) => nodeRules(n, n.style, true)).join("");
   const tablet = flat.map((n) => (n.responsive?.tablet ? nodeRules(n, n.responsive.tablet) : "")).join("");
   const mobile = flat.map((n) => (n.responsive?.mobile ? nodeRules(n, n.responsive.mobile) : "")).join("");
   return (
