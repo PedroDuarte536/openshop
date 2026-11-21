@@ -1,0 +1,11 @@
+sku,name,price,stock,category,images
+WEB-PNG,Web photo (PNG),19.00,5,gifts,https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png
+WEB-TWICE,Web photo twice,19.00,5,gifts,https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png|https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png
+WEB-HTML,Web page instead of a photo,19.00,5,gifts,https://example.com/
+WEB-404,Missing web photo,19.00,5,gifts,https://upload.wikimedia.org/wikipedia/commons/0/00/This_file_does_not_exist_openshop.png
+WEB-HTTP,Plain http photo,19.00,5,gifts,http://example.com/photo.png
+SSRF-LOCAL,Server itself,19.00,5,gifts,https://localhost/photo.png
+SSRF-IP,Cloud metadata,19.00,5,gifts,https://169.254.169.254/latest/meta-data/
+SSRF-DNS,Name pointing to 127.0.0.1,19.00,5,gifts,https://127.0.0.1.nip.io/photo.png
+SSRF-PORT,Other port,19.00,5,gifts,https://example.com:8443/photo.png
+SSRF-CREDS,Password in address,19.00,5,gifts,https://user:secret@example.com/photo.png

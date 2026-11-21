@@ -1,7 +1,14 @@
 node_modules
 dist
+.angular
+__pycache__
 *.db
 *.db-*
 uploads
 demo-data
-.env.demo
+.env
+.env.*
+!.env.demo.example
+*.log
+.vscode
+coverage

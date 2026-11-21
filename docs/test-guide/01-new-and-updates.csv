@@ -1,0 +1,7 @@
+sku;name;price;stock;category;description;images;Colour;Capacity;Glaze finish;visible
+MD-LINEN-MUG;Linen Mug;25,50;20;Mugs & cups;;;;;Satin;
+MD-SAND-MUG;Sand Mug;23,00;12;Mugs & cups;"Our everyday shape in a warm sand glaze; 350 ml.";mugs/sand-mug.png;Sand;350;Matte;
+MD-MOSS-MUG;Moss Mug;23,00;7;Mugs & cups;A deep moss green, still being photographed.;mugs/moss-mug.png;Moss;350;Satin;no
+MD-INK-BOWL;Ink Bowl;31,00;9;Serving bowls;Wide and shallow, for salads and sharing.;bowl.png;Deep teal;;Glossy;
+MD-BAD-PRICE;Price typo;12.345,00;4;Mugs & cups;The price has a thousands separator: this row must be refused.;;;;;
+MD-FAKE-PHOTO;Fake photo;15,00;4;Mugs & cups;The photo is SVG text with a .png name: this row must be refused.;fake.png;;;;

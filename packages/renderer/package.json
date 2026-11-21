@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test test/*.test.ts",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-exclude='../../packages/**' test/*.test.ts"
   },
-  "license": "Elastic-2.0"
+  "license": "MIT"
 }

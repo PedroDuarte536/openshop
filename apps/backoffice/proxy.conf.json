@@ -1,7 +1,8 @@
 {
   "/api": { "target": "http://localhost:3000" },
-  "/s": { "target": "http://localhost:3000" },
+  "/s/": { "target": "http://localhost:3000" },
   "/uploads": { "target": "http://localhost:3000" },
   "/shop": { "target": "http://localhost:3000" },
-  "/search": { "target": "http://localhost:3000" }
+  "/search": { "target": "http://localhost:3000" },
+  "/assets": { "target": "http://localhost:3000" }
 }

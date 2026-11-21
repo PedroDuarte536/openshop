@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { PAGE_TEMPLATES, buildDoc, renderPage } from '@openshop/renderer';
 import { ApiService, PageSummary } from './api.service';
+import { UI } from './config';
 
 const ESSENTIAL: Record<string, { name: string; text: string }> = {
   product: { name: 'Product page', text: 'Shown for every product. Arrange the photos, name, price and add-to-cart button once.' },
@@ -148,7 +149,7 @@ export class Pages {
     });
   }
   remove(p: PageSummary) {
-    if (this.armed() !== p.id) { this.armed.set(p.id); setTimeout(() => { if (this.armed() === p.id) this.armed.set(''); }, 3500); return; }
+    if (this.armed() !== p.id) { this.armed.set(p.id); setTimeout(() => { if (this.armed() === p.id) this.armed.set(''); }, UI.confirmMs); return; }
     this.api.deletePage(p.id).subscribe(() => { this.armed.set(''); this.load(); });
   }
 }

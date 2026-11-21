@@ -23,6 +23,14 @@ export interface FindOptions {
   skip?: number;
 }
 
+/** Thrown by `insert` when a document with the same id already exists (both adapters). Lets callers use ids as unique keys. */
+export class DuplicateKeyError extends Error {
+  constructor(id: string) { super(`Duplicate id: ${id}`); this.name = "DuplicateKeyError"; }
+}
+
+/** A change applied by `updateWhere`: fields to set, and numeric fields to add to (missing fields count as 0). */
+export interface Change<T> { set?: Partial<Omit<T, "id">>; inc?: Record<string, number> }
+
 export interface Collection<T extends Doc = Doc> {
   insert(doc: Omit<T, "id"> & { id?: string }): Promise<T>;
   get(id: string): Promise<T | null>;
@@ -31,6 +39,14 @@ export interface Collection<T extends Doc = Doc> {
   /** Shallow-merges `patch` into the document. Returns the updated doc, or null if missing. */
   update(id: string, patch: Partial<Omit<T, "id">>): Promise<T | null>;
   delete(id: string): Promise<boolean>;
+  /** Deletes every document matching `filter` (an empty filter is refused, so nothing is wiped by mistake). Returns how many. */
+  deleteWhere(filter: Filter): Promise<number>;
+  /**
+   * Atomically applies `change` to the document `id`, but only if it also matches `where`.
+   * Returns the updated document, or null when it is missing or doesn't match. This is a single
+   * statement in each adapter, so it is safe across processes (use it for counters and limits).
+   */
+  updateWhere(id: string, where: Filter, change: Change<T>): Promise<T | null>;
 }
 
 /** The only thing the rest of the platform may depend on. */

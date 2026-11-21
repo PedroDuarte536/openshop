@@ -2,12 +2,14 @@
 """Seeds a realistic demo shop (Maison Dune, hand-made ceramics) through the public admin API.
 
 Draws a product image for every item (needs Pillow: pip install pillow), uploads it, and creates
-categories and products. Safe to re-run: existing categories/products (matched by slug/name) are skipped.
+categories, products, past orders and demo discounts (shop time zone Europe/Lisbon), customer accounts, and a
+backoffice team: the 8 permission-group templates and one staff member per group (see docs/iam-plan-v2.md). Safe to re-run: existing
+categories/products (matched by slug/name) and offers (matched by name) are skipped.
 
     python3 scripts/seed-demo.py            # reads ADMIN_EMAIL / ADMIN_PASSWORD from .env.demo
     API=http://localhost:3000 python3 scripts/seed-demo.py
 """
-import io, json, math, os, random, sys, urllib.request
+import io, json, math, os, random, sys, urllib.parse, urllib.request
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 API = os.environ.get("API", "http://localhost:3000")
@@ -250,12 +252,15 @@ def env(path):
         if "=" in line: k, v = line.strip().split("=", 1); out[k] = v
     return out
 
-def call(method, path, body=None, token=None, raw=None, ctype="application/json"):
+def call(method, path, body=None, token=None, raw=None, ctype="application/json", ok=()):
+    """JSON call; exits on an HTTP error unless its status is in `ok` (then returns (status, body))."""
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     req = urllib.request.Request(API + path, data=data, method=method, headers={**({"content-type": ctype} if data is not None else {}), **({"authorization": f"Bearer {token}"} if token else {})})
     try:
         with urllib.request.urlopen(req) as r: b = r.read(); return json.loads(b) if b else None
-    except urllib.error.HTTPError as e: sys.exit(f"{method} {path} failed: {e.code} {e.read().decode()[:300]}")
+    except urllib.error.HTTPError as e:
+        if e.code in ok: return (e.code, e.read().decode())
+        sys.exit(f"{method} {path} failed: {e.code} {e.read().decode()[:300]}")
 
 CUSTOMERS = [
     ("Marta Costa", "marta.costa@example.com", "Rua das Flores 24, 1200-195 Lisboa, Portugal"),
@@ -275,6 +280,15 @@ ORDERS = [
     (2, [("Night Market Mug", 1)], "cancelled"), (1, [("Salt Cellar", 2), ("Dipping Bowl", 3)], "shipped"), (3, [("Serving Platter", 1)], "pending"),
 ]
 
+
+def all_products(token):
+    """Every product that isn't deleted (the list API is paged: at most 200 per request)."""
+    out, skip = [], 0
+    while True:
+        page = call("GET", f"/api/products?limit=200&skip={skip}&sort=name&facets=false", token=token)
+        out += page["items"]; skip += 200
+        if skip >= page["total"]: return out
+
 def seed_orders(token, products):
     if call("GET", "/api/orders", token=token): print("  orders already exist, skipping"); return
     by = {p["name"]: p for p in products}
@@ -284,16 +298,153 @@ def seed_orders(token, products):
         if status != "pending": call("PATCH", f"/api/orders/{o['id']}", {"status": status}, token)
     print(f"  + {len(ORDERS)} orders from {len(CUSTOMERS)} customers")
 
+def month_start(months_ahead):
+    """Local (shop time) wall clock of the 1st of a future month at 00:00, e.g. "2026-12-01T00:00"."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("Europe/Lisbon"))
+    m = now.month - 1 + months_ahead
+    return f"{now.year + m // 12:04d}-{m % 12 + 1:02d}-01T00:00"
+
+def days_ago(n):
+    """Local (shop time) wall clock n days ago at 00:00: demo offers started in the past, so the insights have history."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    d = datetime.now(ZoneInfo("Europe/Lisbon")) - timedelta(days=n)
+    return f"{d.year:04d}-{d.month:02d}-{d.day:02d}T00:00"
+
+def seed_discounts(token, products, cats):
+    """Demo offers covering each kind: category sale, fixed product price, vouchers, per-customer budget, scheduled."""
+    settings = call("GET", "/api/settings", token=token)
+    if not settings["timezoneConfirmed"]: call("PATCH", "/api/settings", {"timezone": "Europe/Lisbon"}, token)
+    have = {d["name"] for d in call("GET", "/api/discounts", token=token)}
+    by = {p["name"]: p for p in products}
+    def offer(body, codes=None):
+        if body["name"] in have: return
+        d = call("POST", "/api/discounts", body, token)
+        for c in codes or []: call("POST", f"/api/discounts/{d['id']}/codes", c, token)
+        print(f"  + offer: {body['name']}")
+    offer({"name": "Winter sale – mugs", "label": "Winter sale", "campaign": "Winter", "target": {"type": "categories", "categoryIds": [cats["mugs"]["id"]]},
+           "effect": {"type": "percent", "bp": 2000}, "schedule": {"start": days_ago(60), "end": month_start(2)}})
+    offer({"name": "Bud Vase clearance", "label": "Clearance price", "target": {"type": "products", "productIds": [by["Bud Vase"]["id"]]},
+           "effect": {"type": "fixedPrice", "cents": 1900}, "schedule": {"start": days_ago(60)}})
+    offer({"name": "Vase lovers – €20 budget", "label": "Vase lovers", "target": {"type": "categories", "categoryIds": [cats["vases"]["id"]]},
+           "effect": {"type": "percent", "bp": 1500}, "perCustomer": {"maxAmountCents": 2000}, "declinable": True, "schedule": {"start": days_ago(60)}})
+    offer({"name": "Big order bonus", "label": "€10 off orders over €150", "scope": "order", "effect": {"type": "amountOff", "cents": 1000}, "conditions": {"minSubtotalCents": 15000}, "schedule": {"start": days_ago(60)}})
+    offer({"name": "Welcome – first order", "label": "Welcome 10% off", "trigger": "code", "scope": "order", "effect": {"type": "percent", "bp": 1000},
+           "conditions": {"minSubtotalCents": 4000}, "perCustomer": {"firstOrders": 1}, "schedule": {"start": days_ago(60)}}, [{"code": "WELCOME10"}])
+    offer({"name": "Creator codes", "label": "Creator code", "campaign": "Creators", "trigger": "code", "scope": "order", "combinable": True,
+           "effect": {"type": "amountOff", "cents": 500}, "limits": {"totalUses": 200}, "schedule": {"start": days_ago(60)}}, [{"generate": 40, "prefix": "DUNE"}])
+    # An influencer's code that can't be combined with the automatic offers: shoppers choose, and Insights shows how many
+    # pick it even when it costs them more.
+    offer({"name": "Marta Costa (creator)", "label": "Marta's picks", "campaign": "Creators", "trigger": "code", "scope": "order",
+           "effect": {"type": "percent", "bp": 1000}, "schedule": {"start": days_ago(60)}}, [{"code": "MARTA10"}])
+    offer({"name": "Spring preview", "label": "Spring preview", "campaign": "Spring", "effect": {"type": "percent", "bp": 1500},
+           "schedule": {"start": month_start(3), "end": month_start(4)}})
+
+DEMO_PASSWORD = "dune-demo-2026"  # for the demo customer accounts below
+
+def activate(token, customer):
+    """Creates an activation link and uses it like the customer would (sets the demo password)."""
+    link = call("POST", f"/api/customers/{customer['id']}/links", {"purpose": "activate"}, token)
+    req = urllib.request.Request(API + link["path"], data=urllib.parse.urlencode({"password": DEMO_PASSWORD, "confirm": DEMO_PASSWORD}).encode(), method="POST",
+                                 headers={"content-type": "application/x-www-form-urlencoded"})
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k): return None
+    try: urllib.request.build_opener(NoRedirect).open(req)
+    except urllib.error.HTTPError as e:
+        if e.code != 303: sys.exit(f"activation failed for {customer['email']}: {e.code}")
+
+def seed_customers(token, products, cats):
+    """Customer accounts, a trade profile with its own prices, a VIP client price and a personal code."""
+    customers = {c["email"]: c for c in call("GET", "/api/customers", token=token)}
+    def customer(name, email, addr):
+        if email not in customers: customers[email] = call("POST", "/api/customers", {"email": email, "name": name, "address": addr}, token)
+        if not customers[email].get("activated"): activate(token, customers[email]); print(f"  + account: {email}")
+        return customers[email]
+    jonas = customer(*CUSTOMERS[1]); erik = customer(*CUSTOMERS[7]); priya = customer(*CUSTOMERS[2]); sofia = customer(*CUSTOMERS[4])
+    by = {p["name"]: p for p in products}
+    profiles = {p["name"]: p for p in call("GET", "/api/discount-profiles", token=token)}
+    if "Trade buyers" not in profiles:
+        trade = call("POST", "/api/discount-profiles", {"name": "Trade buyers", "publicLabel": "Trade price", "description": "Cafés and shops that resell our pieces."}, token)
+        call("POST", f"/api/discount-profiles/{trade['id']}/members", {"add": [{"customerId": jonas["id"]}, {"customerId": erik["id"]}]}, token)
+        call("POST", "/api/discounts", {"name": "Trade – 30% off everything", "label": "Trade discount", "audience": {"type": "profiles", "profileIds": [trade["id"]]},
+                                         "effect": {"type": "percent", "bp": 3000}, "schedule": {"start": days_ago(60)}}, token)
+        call("POST", "/api/discounts", {"name": "Trade – Linen Mug", "label": "Trade mug price", "audience": {"type": "profiles", "profileIds": [trade["id"]]},
+                                         "target": {"type": "products", "productIds": [by["Linen Mug"]["id"]]}, "effect": {"type": "fixedPrice", "cents": 1500}, "schedule": {"start": days_ago(60)}}, token)
+        print("  + profile: Trade buyers (Jonas, Erik) with 2 offers")
+    have = {d["name"]: d for d in call("GET", "/api/discounts", token=token)}
+    if "Priya – bowls" not in have:
+        call("POST", "/api/discounts", {"name": "Priya – bowls", "label": "Your VIP price", "audience": {"type": "customers", "customerIds": [priya["id"]]},
+                                         "target": {"type": "categories", "categoryIds": [cats["bowls"]["id"]]}, "effect": {"type": "percent", "bp": 2500}, "schedule": {"start": days_ago(60)}}, token)
+        print("  + client price: Priya – bowls")
+    if "Welcome back" not in have:
+        d = call("POST", "/api/discounts", {"name": "Welcome back", "label": "Welcome back", "trigger": "code", "scope": "order", "effect": {"type": "amountOff", "cents": 800},
+                                             "perCustomer": {"maxOrders": 1}, "schedule": {"start": days_ago(60)}}, token)
+        code = call("POST", f"/api/discounts/{d['id']}/codes", {"generate": 1, "prefix": "SOFIA", "assignedCustomerId": sofia["id"]}, token)["items"][0]
+        print(f"  + personal code for Sofia: {code}")
+
+# ---------- team (staff accounts) ----------
+MATRIX = os.path.join(ROOT, "apps", "api", "test", "access-matrix.json")
+
+def seed_team(token):
+    """The test personas of the access matrix (docs/iam-plan-v2.md §2.12), created through the real invite flow:
+    the 8 template groups, one member per group, a member without groups, one in two groups, and an invited,
+    a suspended and a removed member. The owner is the ADMIN_EMAIL account. Staff password: see access-matrix.json."""
+    m = json.load(open(MATRIX))
+    catalog = call("GET", "/api/permissions", token=token)
+    groups = {g["name"]: g for g in call("GET", "/api/staff-groups", token=token)}
+    by_template = {}
+    for t in catalog["templates"]:
+        g = groups.get(t["name"]) or call("POST", "/api/staff-groups", {"name": t["name"], "description": t["description"], "permissions": t["permissions"], "template": t["id"]}, token)
+        by_template[t["id"]] = g["id"]
+        if t["name"] not in groups: print(f"  + group {t['name']}")
+    staff = {u["email"]: u for u in call("GET", "/api/staff?status=all", token=token)["items"]}
+    owner = next(u for u in staff.values() if u["sudo"])
+    if owner["name"] == owner["email"].split("@")[0]:  # still the default name: use the persona's
+        call("PATCH", f"/api/staff/{owner['id']}", {"name": next(p["name"] for p in m["personas"] if p.get("sudo")), "version": owner["version"]}, token)
+    links = []
+    for p in m["personas"]:
+        if p.get("sudo") or p["email"] in staff: continue
+        inv = call("POST", "/api/staff", {"email": p["email"], "name": p["name"], "groupIds": [by_template[g] for g in p["groups"]]}, token)
+        uid, tok = inv["member"]["id"], inv["link"]["path"].split("#", 1)[1]
+        if p.get("state") == "invited":
+            links.append((p["name"], inv["link"].get("url") or "<backoffice address>" + inv["link"]["path"], inv["link"]["expiresAt"]))
+        else:
+            call("POST", "/api/auth/links/consume", {"token": tok, "password": m["password"]})
+            if p.get("state") == "suspended": call("POST", f"/api/staff/{uid}/suspend", {}, token)
+            if p.get("state") == "removed": call("DELETE", f"/api/staff/{uid}", token=token)
+        print(f"  + staff {p['name']} ({p['email']}){' - ' + p['state'] if p.get('state') else ''}")
+    # A little realistic activity for the Activity page: wrong passwords, refused requests, page views.
+    if links or not any(u.get("lastLoginAt") for u in staff.values() if u["email"].endswith("@maison-dune.test")):
+        call("POST", "/api/auth/login", {"email": "pat@maison-dune.test", "password": "wrong-guess-1"}, ok=(401,))
+        call("POST", "/api/auth/login", {"email": "sid@maison-dune.test", "password": m["password"]}, ok=(401,))
+        call("POST", "/api/auth/login", {"email": "nobody@maison-dune.test", "password": "x"}, ok=(401,))
+        for who, tries in (("max", [("GET", "/api/customers"), ("GET", "/api/orders")]), ("pat", [("GET", "/api/reports/summary")]), ("dana", [("GET", "/api/staff")])):
+            t = call("POST", "/api/auth/login", {"email": f"{who}@maison-dune.test", "password": m["password"]})["token"]
+            call("POST", "/api/activity/beacon", {"kind": "page_view", "path": "/products", "feature": "products"}, t)
+            for method, path in tries: call(method, path, token=t, ok=(403,))
+        call("GET", "/api/orders", ok=(401,))
+        print("  + activity: sign-ins, refused sign-ins and requests, page views")
+    if links:
+        out = os.path.join(ROOT, "demo-data", "invite-links.txt")
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        with open(out, "a") as f:
+            for name, url, exp in links: f.write(f"{name}: {url}  (valid until {exp})\n")
+        print(f"  pending invitation links written to {os.path.relpath(out, ROOT)}")
+
 def main():
     e = env(os.path.join(ROOT, ".env.demo"))
     token = call("POST", "/api/auth/login", {"email": e["ADMIN_EMAIL"], "password": e["ADMIN_PASSWORD"]})["token"]
     cats = {c["slug"]: c for c in call("GET", "/api/categories", token=token)}
     for name, slug in CATEGORIES:
         if slug not in cats: cats[slug] = call("POST", "/api/categories", {"name": name, "slug": slug}, token)
-    existing = {p["name"]: p for p in call("GET", "/api/products", token=token)}
+    existing = {p["name"]: p for p in all_products(token)}
     only = {n.strip() for n in sys.argv[sys.argv.index("--only") + 1].split(",")} if "--only" in sys.argv else set()
-    for n in only & existing.keys():  # regenerate: drop the old product so it is created again below
-        call("DELETE", f"/api/products/{existing.pop(n)['id']}", token=token)
+    for n in only & existing.keys():  # regenerate: products are never removed, so hide and delete (soft) the old one
+        old = existing.pop(n)
+        call("PATCH", f"/api/products/{old['id']}", {"active": False}, token)
+        call("DELETE", f"/api/products/{old['id']}", {"bundles": {}}, token)
     made = 0
     for i, (name, cat, price, stock, kind, glaze, bg, desc) in enumerate(P):
         if name in existing: continue
@@ -303,7 +454,10 @@ def main():
         made += 1; print(f"  + {name}")
     for p in existing.values():  # leftover placeholder products stay in the catalogue but hidden from the shop
         if p["name"].strip().lower() == "test" and p.get("active"): call("PATCH", f"/api/products/{p['id']}", {"active": False}, token); print("  hid placeholder product 'Test'")
-    seed_orders(token, call("GET", "/api/products", token=token))
+    seed_orders(token, all_products(token))
+    seed_discounts(token, all_products(token), cats)  # after the orders, so past orders stay at list price
+    seed_customers(token, all_products(token), cats)
+    seed_team(token)
     print(f"Done: {made} products created, {len(CATEGORIES)} categories.")
 
 if __name__ == "__main__": main()

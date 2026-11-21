@@ -2,7 +2,7 @@
    exact HTML the renderer produces. Talks to the Angular host through window.parent.osBuilderHost. */
 (() => {
   const host = () => window.parent && window.parent.osBuilderHost;
-  const NAMES = { section: 'Section', column: 'Column', heading: 'Heading', text: 'Text', image: 'Image', button: 'Button', spacer: 'Spacer', divider: 'Divider', iconBox: 'Icon box', stat: 'Stat', testimonial: 'Testimonial', faq: 'FAQ', gallery: 'Gallery', productGrid: 'Products', productTitle: 'Product name', productPrice: 'Price', productDescription: 'Description', productGallery: 'Product photos', addToCart: 'Add to cart', searchBox: 'Search box', dynamicTitle: 'Page title', categoryNav: 'Categories' };
+  const NAMES = { section: 'Section', column: 'Column', heading: 'Heading', text: 'Text', image: 'Image', button: 'Button', spacer: 'Spacer', divider: 'Divider', iconBox: 'Icon box', stat: 'Stat', testimonial: 'Testimonial', faq: 'FAQ', gallery: 'Gallery', productGrid: 'Products', productTitle: 'Product name', productPrice: 'Price', productDescription: 'Description', productGallery: 'Product photos', addToCart: 'Add to cart', searchBox: 'Search box', dynamicTitle: 'Page title', categoryNav: 'Categories', productOffers: 'Offers' };
   const ICON = {
     grip: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.8"/><circle cx="15" cy="6" r="1.8"/><circle cx="9" cy="12" r="1.8"/><circle cx="15" cy="12" r="1.8"/><circle cx="9" cy="18" r="1.8"/><circle cx="15" cy="18" r="1.8"/></svg>',
     up: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>',

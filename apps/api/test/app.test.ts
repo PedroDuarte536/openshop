@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteDataStore } from "@openshop/db";
@@ -27,6 +27,25 @@ test("admin routes need a token; login validates credentials", async () => {
   assert.equal((await app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "nobody@test.io", password: "x" } })).statusCode, 401);
 });
 
+test("every admin route needs a token (C3): found by scanning the source, so new routes are covered automatically", async () => {
+  const { app } = await make();
+  const dir = join(import.meta.dirname, "..", "src");
+  const files = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(d, e.name)) : e.name.endsWith(".ts") ? [join(d, e.name)] : []));
+  const re = /\b([a-zA-Z]+)\.(get|post|put|patch|delete)(?:<[^(]*?>)?\(["`](\/api\/[^"`]*)["`]/g;
+  const routes = files(dir).flatMap((f) => [...readFileSync(f, "utf8").matchAll(re)].map((m) => ({ on: m[1], method: m[2].toUpperCase(), url: m[3] })));
+  const isPublic = (url: string) => url.startsWith("/api/shop/") || url === "/api/auth/login" || url.startsWith("/api/auth/links/");
+  // Routes registered on the app itself (not the authenticated scope) must be the public ones.
+  assert.deepEqual(routes.filter((r) => r.on === "app" && !isPublic(r.url)), []);
+  const admin = routes.filter((r) => !isPublic(r.url));
+  assert.ok(admin.length >= 75, `found ${admin.length} admin routes`);
+  for (const r of admin) {
+    // Path parameters become "x"; a route built in a loop (`/api/discounts/:id/${action}`) gets a real action.
+    const url = r.url.replace(/:[a-zA-Z]+/g, "x").replace(/\$\{action\}/g, r.url.startsWith("/api/staff/") ? "suspend" : "pause");
+    for (const headers of [{}, { authorization: "Bearer not-a-token" }])
+      assert.equal((await app.inject({ method: r.method as "GET", url, headers })).statusCode, 401, `${r.method} ${r.url}`);
+  }
+});
+
 test("login is throttled after repeated failures", async () => {
   const { app } = await make();
   let last = 0;
@@ -44,8 +63,10 @@ test("products CRUD; PATCH does not reset other fields", async () => {
   assert.equal(p.json().price, 12);
   assert.equal(p.json().active, false);
   assert.equal(p.json().stock, 3);
+  // Products are never removed: deleting a hidden product is a soft delete (see catalogue.test.ts).
   assert.equal((await app.inject({ method: "DELETE", url: `/api/products/${id}`, headers: h })).statusCode, 204);
-  assert.equal((await app.inject({ method: "GET", url: `/api/products/${id}`, headers: h })).statusCode, 404);
+  assert.ok((await app.inject({ method: "GET", url: `/api/products/${id}`, headers: h })).json().deletedAt);
+  assert.equal((await app.inject({ method: "GET", url: `/api/products/missing`, headers: h })).statusCode, 404);
 });
 
 const sec = (children: unknown[]) => ({ id: "s" + Math.random().toString(36).slice(2, 8), type: "section", children: [{ id: "c" + Math.random().toString(36).slice(2, 8), type: "column", children }] });
@@ -75,7 +96,9 @@ test("page documents are validated, cleaned, and rendered with theme", async () 
   assert.equal(bad.statusCode, 400);
   const evil = await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "evil", title: "x", theme: { primary: "red;}</style><script>1</script>" }, nodes: [{ id: "s1", type: "section", style: { color: "red;}</style>" }, children: [] }] } });
   assert.equal(evil.statusCode, 201);
-  assert.doesNotMatch(evil.json().html, /<script/);
+  // The only script a published page may contain is the shop's own storefront script.
+  assert.deepEqual(evil.json().html.match(/<script[^>]*>/g), ['<script src="/assets/shop.js" defer>']);
+  assert.doesNotMatch(evil.json().html, /<script>1/);
   assert.equal(evil.json().theme.primary, "#2B4BFF");
   const home = await app.inject({ method: "POST", url: "/api/pages", headers: h, payload: { slug: "home", title: "Home", theme: { primary: "#E4442B" }, nodes: [sec([{ id: "h1", type: "heading", props: { text: "Welcome" } }])] } });
   assert.match((await app.inject({ method: "GET", url: "/" })).body, /Welcome/);

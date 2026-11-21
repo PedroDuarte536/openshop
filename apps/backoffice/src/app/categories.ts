@@ -1,12 +1,14 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService, Category, Product } from './api.service';
+import { ApiService, Category } from './api.service';
+import { UI } from './config';
 
 @Component({
   selector: 'app-categories',
   imports: [FormsModule],
   template: `
     <header class="page-h"><div><h1>Categories</h1><p>Group products so visitors can browse them</p></div></header>
+    @if (manage) {
     <div class="card" style="padding:22px;margin-bottom:22px">
       <form (ngSubmit)="add()" class="nform">
         <label class="fld req"><span>Name</span><input class="inp" name="name" [(ngModel)]="name" (ngModelChange)="autoSlug()" placeholder="e.g. Mugs" required></label>
@@ -15,6 +17,7 @@ import { ApiService, Category, Product } from './api.service';
       </form>
       @if (error()) { <p class="err" role="alert">{{ error() }}</p> }
     </div>
+    }
     <div class="card">
       @if (items().length) {
         <table class="tbl">
@@ -27,7 +30,7 @@ import { ApiService, Category, Product } from './api.service';
                 <td>{{ count(c.id) }}</td>
                 <td><div class="acts">
                   <a class="btn sm" [href]="'/shop/category/' + c.slug" target="_blank" rel="noopener">View</a>
-                  <button class="btn sm danger" [class.armed]="armed() === c.id" (click)="remove(c)">{{ armed() === c.id ? 'Click to confirm' : 'Delete' }}</button>
+                  @if (manage) { <button class="btn sm danger" [class.armed]="armed() === c.id" (click)="remove(c)">{{ armed() === c.id ? 'Click to confirm' : 'Delete' }}</button> }
                 </div></td>
               </tr>
             }
@@ -38,10 +41,13 @@ import { ApiService, Category, Product } from './api.service';
 })
 export class Categories {
   private api = inject(ApiService);
-  items = signal<Category[]>([]); products = signal<Product[]>([]); error = signal(''); armed = signal('');
+  manage = this.api.can('catalog.manage');
+  items = signal<Category[]>([]); error = signal(''); armed = signal('');
   name = ''; slug = ''; private last = '';
-  counts = computed(() => { const m = new Map<string, number>(); for (const p of this.products()) if (p.categoryId) m.set(p.categoryId, (m.get(p.categoryId) ?? 0) + 1); return m; });
-  constructor() { this.load(); this.api.products().subscribe((p) => this.products.set(p)); }
+  /** Products per category, from the search counts (no need to load every product). */
+  counts = signal(new Map<string, number>());
+  constructor() { this.load(); this.loadCounts(); }
+  loadCounts() { this.api.searchProducts({ limit: '0' }).subscribe((r) => this.counts.set(new Map((r.facets?.categories ?? []).filter((c) => c.id).map((c) => [c.id!, c.count])))); }
   count(id: string) { return this.counts().get(id) ?? 0; }
   load() { this.api.categories().subscribe((c) => this.items.set(c)); }
   private slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -53,7 +59,7 @@ export class Categories {
     });
   }
   remove(c: Category) {
-    if (this.armed() !== c.id) { this.armed.set(c.id); setTimeout(() => { if (this.armed() === c.id) this.armed.set(''); }, 3500); return; }
+    if (this.armed() !== c.id) { this.armed.set(c.id); setTimeout(() => { if (this.armed() === c.id) this.armed.set(''); }, UI.confirmMs); return; }
     this.api.deleteCategory(c.id).subscribe(() => { this.armed.set(''); this.load(); });
   }
 }

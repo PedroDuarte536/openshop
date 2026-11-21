@@ -199,3 +199,6 @@
 .bld .chrome .addr input{border:0;outline:0;background:transparent;font:700 12px 'Figtree';color:var(--ink);width:150px;padding:6px 8px 6px 0}
 .bld .shopnote{padding:10px 12px;border-radius:11px;background:rgba(255,210,63,.22);color:#5b4700}
 .bld .tile.shop .ti{background:rgba(255,210,63,.35);color:#7a5e00}
+
+.newfeat{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 auto 12px;max-width:980px;padding:10px 14px;border-radius:12px;background:#E6EBFF;color:#1C2E8C;font-weight:600;font-size:13px}
+.newfeat button{border:0;border-radius:9px;padding:7px 12px;background:var(--cobalt,#2B4BFF);color:#fff;font-weight:700;cursor:pointer}

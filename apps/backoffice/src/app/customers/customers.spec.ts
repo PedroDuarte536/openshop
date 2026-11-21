@@ -1,0 +1,134 @@
+import { Customers } from './list';
+import { CustomerPage } from './detail';
+import { mount, button } from '../testing/harness';
+import { customerDetail, customers, offer, profile } from '../testing/fixtures';
+
+describe('Customers list', () => {
+  it('searches, filters by account, and creates a customer', async () => {
+    const m = await mount(Customers);
+    const nav = vi.spyOn(m.router, 'navigate').mockResolvedValue(true);
+    await m.reply('GET', '/api/customers', customers);
+    expect(m.all('tbody tr').length).toBe(2);
+    expect(m.text('tbody tr:nth-child(1)')).toContain('Active');
+    expect(m.text('tbody tr:nth-child(1)')).toContain('Trade');
+    expect(m.text('tbody tr:nth-child(2)')).toContain('No account');
+    await m.select('select[aria-label="Filter by account"]', 'no');
+    expect(m.all('tbody tr').length).toBe(1);
+    await m.select('select[aria-label="Filter by account"]', 'yes');
+    expect(m.text('tbody')).toContain('Ann');
+    await m.select('select[aria-label="Filter by account"]', '');
+    await m.type('input[type=search]', 'nobody');
+    expect(m.text()).toContain('No customers match');
+    await m.click(button(m.el, '+ New customer'));
+    await m.type('input[name=email]', 'new@x.io');
+    await m.type('input[name=name]', 'New');
+    await m.type('input[name=address]', '3 Road');
+    await m.click(button(m.el, 'Create customer'));
+    await m.reply('POST', '/api/customers', { fields: [{ field: 'email', message: 'already a customer' }] }, 409);
+    expect(m.text('[role=alert]')).toBe('Email: already a customer');
+    await m.click(button(m.el, 'Create customer'));
+    await m.reply('POST', '/api/customers', {}, 500);
+    expect(m.text('[role=alert]')).toBe('Could not create the customer.');
+    await m.click(button(m.el, 'Create customer'));
+    const req = await m.reply('POST', '/api/customers', { ...customers[1], id: 'cu-new' });
+    expect(req.request.body).toEqual({ email: 'new@x.io', name: 'New', address: '3 Road' });
+    expect(nav).toHaveBeenCalledWith(['/customers', 'cu-new']);
+    await m.click(button(m.el, 'Close'));
+    expect(m.el.querySelector('input[name=email]')).toBeNull();
+  });
+});
+
+describe('Customer page', () => {
+  async function setup(detail = customerDetail()) {
+    const m = await mount(CustomerPage, { inputs: { id: 'cu-ann' } });
+    await m.reply('GET', '/api/discount-profiles', [profile(), profile({ id: 'pr-vip', name: 'VIP', publicLabel: 'VIP' })]);
+    await m.reply('GET', '/api/discounts', [offer({ name: 'Welcome back', trigger: 'code' }, { id: 'd-v' }), offer({ name: 'Old code', trigger: 'code', status: 'archived' }), offer({ name: 'Auto' })]);
+    await m.reply('GET', '/api/customers/cu-ann', detail);
+    return m;
+  }
+  it('shows the account, profiles, client prices, codes, usage and orders', async () => {
+    const m = await setup();
+    expect(m.text('header')).toContain('ann@x.io · 3 orders');
+    expect(m.text()).toContain('Active');
+    expect(m.text()).toContain('Trade');
+    expect(m.text()).toContain('Ann 15%');
+    expect(m.text()).toContain('ANN-1');
+    expect(m.text()).toContain('€7.50');
+    expect(m.text()).toContain('−€5.00');
+    expect(m.all('select[name=voucher] option').map((o) => o.textContent)).toEqual(['Welcome back']);
+    expect(m.all('select[name=prof] option').map((o) => o.textContent)).toEqual(['VIP']);
+  });
+  it('creates one-time links, copies them, signs the customer out everywhere', async () => {
+    const m = await setup(customerDetail({ activated: false, pendingLink: { purpose: 'activate', expiresAt: '2026-06-18T10:00:00Z' } }));
+    expect(m.text()).toContain('An activation link is waiting');
+    await m.click(button(m.el, 'Create activation link'));
+    await m.reply('POST', '/api/customers/cu-ann/links', { path: '/shop/account/activate/abc', url: null, expiresAt: '2026-06-18T10:00:00Z' });
+    await m.reply('GET', '/api/customers/cu-ann', customerDetail({ activated: false }));
+    expect((m.el.querySelector('.linkbox input') as HTMLInputElement).value).toBe(`${location.origin}/shop/account/activate/abc`);
+    const write = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true });
+    await m.click(button(m.el, 'Copy link'));
+    await m.settle();
+    expect(write).toHaveBeenCalledWith(`${location.origin}/shop/account/activate/abc`);
+    expect(m.text('.linkbox')).toContain('Copied');
+    expect(m.cmp.full({ path: '/x', url: 'https://shop.example/x', expiresAt: '' })).toBe('https://shop.example/x');
+    m.cmp.link('reset');
+    await m.reply('POST', '/api/customers/cu-ann/links', { path: '/shop/account/reset/def', url: null, expiresAt: '' });
+    await m.reply('GET', '/api/customers/cu-ann', customerDetail());
+    await m.click(button(m.el, 'Sign out everywhere'));
+    await m.reply('POST', '/api/customers/cu-ann/sign-out', customerDetail());
+    expect(m.text('[role=status]')).toBe('Signed out on every device.');
+  });
+  it('manages profile membership and personal codes', async () => {
+    const m = await setup();
+    await m.type('input[name=last]', '2026-12-31');
+    await m.click(button(m.el, 'Add', 'form button'));
+    const add = await m.reply('POST', '/api/discount-profiles/pr-vip/members', profile());
+    expect(add.request.body).toEqual({ add: [{ customerId: 'cu-ann', lastDay: '2026-12-31' }] });
+    await m.reply('GET', '/api/discount-profiles', [profile(), profile({ id: 'pr-vip', name: 'VIP' })]);
+    await m.reply('GET', '/api/customers/cu-ann', customerDetail({ profiles: [{ id: 'pr-trade', name: 'Trade', publicLabel: 'T', status: 'paused', validUntil: '2026-12-31T00:00:00Z' }, { id: 'pr-vip', name: 'VIP', publicLabel: 'VIP', status: 'active', validUntil: null }] }));
+    expect(m.text()).toContain('Already in every profile');
+    expect(m.text()).toContain('profile paused');
+    await m.click(button(m.el, 'Remove'));
+    const rm = await m.reply('POST', '/api/discount-profiles/pr-trade/members', profile());
+    expect(rm.request.body).toEqual({ remove: ['cu-ann'] });
+    await m.reply('GET', '/api/customers/cu-ann', customerDetail());
+    await m.type('input[name=prefix]', 'vip');
+    await m.click(button(m.el, 'Give a personal code'));
+    const code = await m.reply('POST', '/api/discounts/d-v/codes', { created: 1, items: ['VIP-AAAAA-BBBBB'] });
+    expect(code.request.body).toEqual({ generate: 1, prefix: 'VIP', assignedCustomerId: 'cu-ann' });
+    await m.reply('GET', '/api/customers/cu-ann', customerDetail());
+    expect(m.text('[role=status]')).toBe('Personal code VIP-AAAAA-BBBBB created.');
+    await m.click(button(m.el, 'Give a personal code'));
+    await m.reply('POST', '/api/discounts/d-v/codes', { fields: [{ field: 'prefix', message: '1 to 12 letters or digits' }] }, 400);
+    expect(m.text('[role=alert]')).toBe('1 to 12 letters or digits');
+    m.cmp.profileId = 'pr-trade';
+    m.cmp.addProfile();
+    await m.reply('POST', '/api/discount-profiles/pr-trade/members', { error: 'Nope' }, 400);
+    expect(m.text('[role=alert]')).toBe('Nope');
+  });
+  it('deletes after confirmation, and leaves for unknown customers', async () => {
+    const m = await setup(customerDetail({ profiles: [], personalOffers: [], codes: [], usage: [], orders: [], activated: false }));
+    const nav = vi.spyOn(m.router, 'navigate').mockResolvedValue(true);
+    expect(m.text()).toContain('Not in any profile');
+    expect(m.text()).toContain('No offers just for this customer');
+    expect(m.text()).toContain('No orders yet');
+    await m.click(button(m.el, 'Delete Ann'));
+    await m.click(button(m.el, 'Click to confirm'));
+    await m.reply('DELETE', '/api/customers/cu-ann', null);
+    expect(nav).toHaveBeenCalledWith(['/customers']);
+    m.cmp.load('ghost');
+    await m.reply('GET', '/api/customers/ghost', {}, 404);
+    expect(nav).toHaveBeenCalledWith(['/customers']);
+  });
+  it('handles shops without profiles or vouchers', async () => {
+    const m = await mount(CustomerPage, { inputs: { id: 'cu-ann' } });
+    await m.reply('GET', '/api/discount-profiles', []);
+    await m.reply('GET', '/api/discounts', []);
+    await m.reply('GET', '/api/customers/cu-ann', customerDetail({ profiles: [] }));
+    expect(m.text()).toContain('No profiles yet');
+    expect(m.text()).toContain('Create a voucher offer first');
+    m.cmp.giveCode(); m.cmp.addProfile();
+    m.http.verify();
+  });
+});

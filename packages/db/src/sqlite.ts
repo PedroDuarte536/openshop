@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
-import type { Collection, DataStore, Doc, Filter, FindOptions, Operators } from "./types.ts";
+import { DuplicateKeyError, type Change, type Collection, type DataStore, type Doc, type Filter, type FindOptions, type Operators } from "./types.ts";
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const PATH = /^[A-Za-z_][A-Za-z0-9_.]*$/;
@@ -8,6 +8,13 @@ const PATH = /^[A-Za-z_][A-Za-z0-9_.]*$/;
 function assertName(n: string) {
   if (!NAME.test(n)) throw new Error(`Invalid collection name: ${n}`);
 }
+function assertField(n: string) {
+  if (!NAME.test(n) || n === "id") throw new Error(`Invalid field name: ${n}`);
+}
+const isDuplicate = (e: unknown) => {
+  const err = e as { errcode?: number; message?: string };
+  return err?.errcode === 1555 || err?.errcode === 2067 || /UNIQUE constraint failed/.test(err?.message ?? "");
+};
 function jsonPath(field: string) {
   if (!PATH.test(field)) throw new Error(`Invalid field path: ${field}`);
   return `$.${field}`;
@@ -59,7 +66,8 @@ class SqliteCollection<T extends Doc> implements Collection<T> {
   async insert(doc: Omit<T, "id"> & { id?: string }): Promise<T> {
     const id = doc.id ?? randomUUID();
     const { id: _ignored, ...rest } = doc as Record<string, unknown>;
-    this.db.prepare(`INSERT INTO ${this.table} (id, data) VALUES (?, ?)`).run(id, JSON.stringify(rest));
+    try { this.db.prepare(`INSERT INTO ${this.table} (id, data) VALUES (?, ?)`).run(id, JSON.stringify(rest)); }
+    catch (e) { if (isDuplicate(e)) throw new DuplicateKeyError(id); throw e; }
     return { ...rest, id } as T;
   }
   async get(id: string): Promise<T | null> {
@@ -81,15 +89,51 @@ class SqliteCollection<T extends Doc> implements Collection<T> {
     const row = this.db.prepare(`SELECT COUNT(*) AS n FROM ${this.table} ${sql}`).get(...params) as { n: number };
     return row.n;
   }
+  /**
+   * One UPDATE … RETURNING statement: each top-level field is replaced with json_set (nested objects are replaced,
+   * not merged, like Mongo's $set), and `undefined` removes the field. Reading and writing in separate steps would
+   * let a concurrent `updateWhere` (e.g. a checkout's stock decrement) be overwritten with the old value.
+   */
   async update(id: string, patch: Partial<Omit<T, "id">>): Promise<T | null> {
-    const current = await this.get(id);
-    if (!current) return null;
-    const { id: _id, ...rest } = { ...current, ...patch } as Record<string, unknown>;
-    this.db.prepare(`UPDATE ${this.table} SET data = ? WHERE id = ?`).run(JSON.stringify(rest), id);
-    return { ...rest, id } as T;
+    let expr = "data";
+    const params: (string | number | null)[] = [];
+    for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
+      if (k === "id") continue;
+      assertField(k);
+      if (v === undefined) { expr = `json_remove(${expr}, '${jsonPath(k)}')`; continue; }
+      expr = `json_set(${expr}, '${jsonPath(k)}', json(?))`;
+      params.push(JSON.stringify(v));
+    }
+    const row = this.db.prepare(`UPDATE ${this.table} SET data = ${expr} WHERE id = ? RETURNING id, data`).get(...params, id);
+    return row ? this.parse(row) : null;
   }
   async delete(id: string): Promise<boolean> {
     return this.db.prepare(`DELETE FROM ${this.table} WHERE id = ?`).run(id).changes > 0;
+  }
+  async deleteWhere(filter: Filter): Promise<number> {
+    const { sql, params } = buildWhere(filter);
+    if (!sql) throw new Error("deleteWhere needs a filter");
+    return Number(this.db.prepare(`DELETE FROM ${this.table} ${sql}`).run(...params).changes);
+  }
+  /** One UPDATE … WHERE … RETURNING statement, so the check and the change can't be separated. */
+  async updateWhere(id: string, where: Filter, change: Change<T>): Promise<T | null> {
+    let expr = "data";
+    const params: (string | number | null)[] = [];
+    for (const [k, v] of Object.entries(change.set ?? {})) {
+      assertField(k);
+      expr = `json_set(${expr}, '${jsonPath(k)}', json(?))`;
+      params.push(JSON.stringify(v ?? null));
+    }
+    for (const [k, v] of Object.entries(change.inc ?? {})) {
+      assertField(k);
+      if (typeof v !== "number" || !Number.isFinite(v)) throw new Error(`Invalid increment for ${k}`);
+      expr = `json_set(${expr}, '${jsonPath(k)}', COALESCE(json_extract(data, '${jsonPath(k)}'), 0) + ?)`;
+      params.push(v);
+    }
+    const w = buildWhere(where);
+    const cond = w.sql ? ` AND ${w.sql.slice("WHERE ".length)}` : "";
+    const row = this.db.prepare(`UPDATE ${this.table} SET data = ${expr} WHERE id = ?${cond} RETURNING id, data`).get(...params, id, ...w.params);
+    return row ? this.parse(row) : null;
   }
 }
 

@@ -7,6 +7,9 @@ export const WIDGET_TYPES = [
   "heading", "text", "image", "button", "spacer", "divider", "iconBox", "stat", "testimonial", "faq", "gallery", "productGrid",
   // bound to the shop: they show real data on product / category / search pages and sample data in the editor
   "productTitle", "productPrice", "productDescription", "productGallery", "addToCart", "searchBox", "dynamicTitle", "categoryNav",
+  "productOffers",
+  // catalogue: filters, sorting and paging on category and search pages; product details, bundles and variants
+  "searchFilters", "resultsBar", "productSpecs", "bundleContents", "productBundles", "productVariants",
 ] as const;
 export type WidgetType = (typeof WIDGET_TYPES)[number];
 export type NodeType = "section" | "column" | WidgetType;
@@ -47,11 +50,47 @@ export interface Theme {
 }
 
 export interface PageDoc { title: string; theme?: Partial<Theme>; nodes: Node[] }
-export interface ProductCard { id?: string; name: string; price: number; image?: string; href?: string }
-export interface ProductCtx { id: string; name: string; price: number; description?: string; images?: string[]; stock?: number }
+export interface ProductCard { id?: string; name: string; price: number; image?: string; href?: string; soldOut?: boolean }
+/** A bundle's contents on its product page. `href` only for components shoppers can open. */
+export interface BundleCtx { components: { name: string; qty: number; image?: string; href?: string }[]; savings?: number }
+/** One badge of the variant selector: the current value, a link to the product with that value, or disabled. */
+export interface VariantBadge { label: string; state: "selected" | "link" | "disabled"; href?: string; soldOut?: boolean; swatch?: string | null }
+export interface ProductCtx {
+  id: string; name: string; price: number; description?: string; images?: string[]; stock?: number;
+  /** Public properties marked "shown on the product page". */
+  specs?: { label: string; value: string }[];
+  bundle?: BundleCtx;
+  /** One line per property that tells the variants apart. */
+  variants?: { label: string; badges: VariantBadge[] }[];
+  /** Visible bundles that contain this product ("As seen in these bundles"). */
+  inBundles?: ProductCard[];
+}
 export interface CategoryRef { name: string; slug: string }
+export interface FacetOption { value: string; label: string; count: number; selected: boolean; swatch?: string | null }
+/** A filter group: its values with counts (category and properties). `param` is the query-string name. */
+export interface SearchFacet { key: string; label: string; param: string; options: FacetOption[] }
+/** Everything the filter, sort and paging widgets need on a category or search page. All links are built by the server. */
+export interface SearchState {
+  /** Form action: /search, /shop or /shop/category/<slug>. */
+  path: string;
+  /** Parameters kept when the filter or sort form is sent (e.g. q, sort). */
+  keep: [string, string][];
+  total: number; page: number; pages: number;
+  sort: string; sorts: { value: string; label: string }[];
+  facets: SearchFacet[];
+  price: { min: number | null; max: number | null; bounds: { min: number; max: number } | null };
+  inStock: { selected: boolean; count: number } | null;
+  chips: { label: string; href: string }[];
+  clearHref: string;
+  pageLinks: { n: number; href: string; current: boolean }[];
+  prevHref: string | null; nextHref: string | null;
+  /** The query as corrected by typo tolerance, when the results exist only thanks to it. */
+  corrected: string | null;
+  /** Sorted or filtered by price: the storefront script asks the API for the visitor's own prices (this query string). */
+  personal: string | null;
+}
 /** Data for the shop-bound widgets. In the editor (or with `sample`) anything missing is filled with sample data. */
-export interface RenderContext { product?: ProductCtx; category?: CategoryRef; query?: string; categories?: CategoryRef[]; results?: ProductCard[] }
+export interface RenderContext { product?: ProductCtx; category?: CategoryRef; query?: string; categories?: CategoryRef[]; results?: ProductCard[]; search?: SearchState }
 export interface RenderOptions {
   /** Adds data-node / data-edit attributes and drop placeholders for the visual editor. */
   editor?: boolean;
@@ -60,7 +99,16 @@ export interface RenderOptions {
   context?: RenderContext;
   /** Supplies products for a productGrid node. Without it, sample products are shown. */
   products?: (node: Node) => ProductCard[];
+  /**
+   * Published shop pages only: adds the storefront script, which loads prices and offers from the API.
+   * Discount data itself never goes into the HTML. Off by default (editor canvases and thumbnails).
+   */
+  shopScript?: boolean;
+  /** Filtered, sorted or paged result pages: not indexed by search engines, with a canonical link to the plain page. */
+  meta?: { noindex?: boolean; canonical?: string | null };
 }
+/** Where the storefront script is served from. */
+export const SHOP_SCRIPT = "/assets/shop.js";
 
 export const DEFAULT_THEME: Theme = {
   primary: "#2B4BFF", text: "#121826", bg: "#FFFFFF", surface: "#F1F3FF", accent: "#FFD23F",
@@ -74,6 +122,16 @@ export const esc = (s: unknown) =>
 export function safeUrl(u: unknown): string {
   const v = typeof u === "string" ? u.trim() : "";
   return /^(https?:|mailto:|tel:|\/(?!\/)|#)/i.test(v) && !/[\u0000-\u001f\s"'<>\\]/.test(v) ? v : "#";
+}
+/** Links the server builds for search and category pages (filters, sorting, paging): only those paths, no markup characters. */
+export function safeShopLink(u: unknown): string {
+  const v = typeof u === "string" ? u : "";
+  return /^\/(search|shop)(\/category\/[a-z0-9-]{1,80})?(\?[^"'<>\s\\]{0,2000})?$/.test(v) ? v : "#";
+}
+/** Product pages: /shop/product/<id> only. */
+export function safeProductLink(u: unknown): string {
+  const v = typeof u === "string" ? u : "";
+  return /^\/shop\/product\/[A-Za-z0-9_-]{1,64}$/.test(v) ? v : "#";
 }
 /** Images: https or our own /uploads only, and nothing that could break out of a CSS url(). */
 export function safeImage(u: unknown): string {
@@ -161,14 +219,21 @@ function normProps(type: NodeType, raw: unknown): Record<string, unknown> {
       items: items(p.items, 24).map((i) => ({ src: safeImage(i.src), alt: str(i.alt, 300), art: i.art ? pick(i.art, ART_KEYS, "aurora") : "" })),
       cols: Math.round(num(p.cols, 2, 6) ?? 4), ratio: pick(p.ratio, RATIOS, "1/1"),
     };
-    case "productGrid": return { categoryId: str(p.categoryId, 64), limit: Math.round(num(p.limit, 1, 48) ?? 4), cols: Math.round(num(p.cols, 2, 5) ?? 4), source: pick(p.source, ["catalogue", "results"] as const, "catalogue") };
+    case "productGrid": return { categoryId: str(p.categoryId, 64), limit: Math.round(num(p.limit, 1, 48) ?? 4), cols: Math.round(num(p.cols, 2, 5) ?? 4), source: pick(p.source, ["catalogue", "results"] as const, "catalogue"), paginate: bool(p.paginate) };
     case "productTitle": return { level: Math.round(num(p.level, 1, 3) ?? 1) };
     case "productPrice": case "productDescription": return {};
+    case "productOffers": return { heading: str(p.heading, 80, "Offers") };
     case "productGallery": return { ratio: pick(p.ratio, RATIOS, "4/5") };
     case "addToCart": return { label: str(p.label, 60, "Add to cart"), qty: bool(p.qty, true) };
     case "searchBox": return { placeholder: str(p.placeholder, 80, "Search the shop"), button: str(p.button, 40, "Search") };
     case "dynamicTitle": return { source: pick(p.source, ["category", "search"] as const, "category"), level: Math.round(num(p.level, 1, 3) ?? 1) };
     case "categoryNav": return { layout: pick(p.layout, ["pills", "list"] as const, "pills") };
+    case "searchFilters": return { layout: pick(p.layout, ["sidebar", "bar"] as const, "sidebar"), price: bool(p.price, true), availability: bool(p.availability, true), category: bool(p.category, true), maxValues: Math.round(num(p.maxValues, 3, 20) ?? 8), heading: str(p.heading, 60, "Filter") };
+    case "resultsBar": return { showCount: bool(p.showCount, true), sort: bool(p.sort, true) };
+    case "productSpecs": return { heading: str(p.heading, 80, "Details") };
+    case "bundleContents": return { heading: str(p.heading, 80, "What's in the set"), images: bool(p.images, true) };
+    case "productBundles": return { heading: str(p.heading, 80, "As seen in these bundles"), limit: Math.round(num(p.limit, 1, 12) ?? 4), cols: Math.round(num(p.cols, 2, 5) ?? 4) };
+    case "productVariants": return { swatches: bool(p.swatches, true), showSoldOut: bool(p.showSoldOut, true), disabledStyle: pick(p.disabledStyle, ["faded", "struck"] as const, "faded") };
   }
 }
 
