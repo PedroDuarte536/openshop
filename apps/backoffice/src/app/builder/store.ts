@@ -11,7 +11,8 @@ export const NAMES: Record<NodeType, string> = {
   section: 'Section', column: 'Column', heading: 'Heading', text: 'Text', image: 'Image', button: 'Button', spacer: 'Spacer', divider: 'Divider',
   iconBox: 'Icon box', stat: 'Stat', testimonial: 'Testimonial', faq: 'FAQ', gallery: 'Gallery', productGrid: 'Products',
   productTitle: 'Product name', productPrice: 'Price', productDescription: 'Description', productGallery: 'Product photos', addToCart: 'Add to cart',
-  searchBox: 'Search box', dynamicTitle: 'Page title', categoryNav: 'Categories',
+  searchBox: 'Search box', dynamicTitle: 'Page title', categoryNav: 'Categories', productOffers: 'Offers',
+  searchFilters: 'Filters', resultsBar: 'Results bar', productSpecs: 'Product details', bundleContents: 'Bundle contents', productBundles: 'In bundles', productVariants: 'Variants',
 };
 
 interface Loc { list: Node[]; index: number; parent: Node | null }
@@ -154,6 +155,33 @@ export class BuilderStore {
     this.insertNew('widget', { type }, target, pos);
   }
   addSectionTemplate(item: any) { this.insertNew('section', item, null, 'end'); }
+
+  /** Catalogue widgets an essential page designed before they existed doesn't have yet. Nothing is added on its own. */
+  missingCatalogueWidgets(system: string | null): WidgetType[] {
+    const want: WidgetType[] = system === 'product' ? ['productVariants', 'bundleContents', 'productSpecs', 'productBundles'] : system === 'category' || system === 'search' ? ['searchFilters', 'resultsBar'] : [];
+    const have = new Set<string>();
+    const walk = (ns: Node[]) => ns.forEach((n) => { have.add(n.type); if (n.children) walk(n.children); });
+    walk(this.doc().nodes);
+    return want.filter((t) => !have.has(t));
+  }
+
+  /** Adds the missing catalogue widgets next to the results grid (listings) or the add-to-cart button (product page). */
+  addCatalogueWidgets(system: string | null) {
+    const missing = this.missingCatalogueWidgets(system);
+    if (!missing.length) return;
+    this.commit((d) => {
+      const all: Node[] = [];
+      const walk = (ns: Node[]) => ns.forEach((n) => { all.push(n); if (n.children) walk(n.children); });
+      walk(d.nodes);
+      const anchor = system === 'product' ? all.find((n) => n.type === 'addToCart') : all.find((n) => n.type === 'productGrid' && n.props['source'] === 'results');
+      if (anchor && system !== 'product') anchor.props['paginate'] = true;
+      const nodes = missing.map((t) => newWidget(t));
+      if (!anchor) { const sec = newSection([12]); sec.children![0].children = nodes; d.nodes.push(sec); return; }
+      const loc = locate(d.nodes, anchor.id)!;
+      // Listings: filters and the results bar above the grid. Product page: after the add-to-cart button.
+      loc.list.splice(system === 'product' ? loc.index + 1 : loc.index, 0, ...nodes);
+    });
+  }
 
   move(id: string, targetId: string | null, pos: Pos) {
     if (id === targetId) return;

@@ -1,0 +1,14 @@
+{
+  "name": "@openshop/pricing",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-exclude='../../packages/**' test/*.test.ts"
+  },
+  "license": "MIT"
+}

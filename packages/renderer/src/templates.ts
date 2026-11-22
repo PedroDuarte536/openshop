@@ -29,12 +29,19 @@ export const WIDGETS: { type: WidgetType; label: string; icon: IconKey; hint: st
   { type: "spacer", label: "Spacer", icon: "package", hint: "Breathing room", group: "basic" },
   { type: "productTitle", label: "Product name", icon: "star", hint: "On product pages", group: "shop" },
   { type: "productPrice", label: "Product price", icon: "gift", hint: "On product pages", group: "shop" },
+  { type: "productOffers", label: "Offers", icon: "sparkle", hint: "Discounts for this product", group: "shop" },
   { type: "productDescription", label: "Description", icon: "check", hint: "On product pages", group: "shop" },
   { type: "productGallery", label: "Product photos", icon: "leaf", hint: "On product pages", group: "shop" },
   { type: "addToCart", label: "Add to cart", icon: "cart", hint: "On product pages", group: "shop" },
   { type: "dynamicTitle", label: "Page title", icon: "bolt", hint: "Category or search name", group: "shop" },
   { type: "searchBox", label: "Search box", icon: "globe", hint: "Find products", group: "shop" },
   { type: "categoryNav", label: "Categories", icon: "sparkle", hint: "Browse by category", group: "shop" },
+  { type: "searchFilters", label: "Filters", icon: "check", hint: "Filter results by property and price", group: "shop" },
+  { type: "resultsBar", label: "Results bar", icon: "clock", hint: "Number of results and sorting", group: "shop" },
+  { type: "productSpecs", label: "Product details", icon: "package", hint: "The product's properties", group: "shop" },
+  { type: "productVariants", label: "Variants", icon: "star", hint: "Choose colour, size…", group: "shop" },
+  { type: "bundleContents", label: "Bundle contents", icon: "gift", hint: "What's in a bundle", group: "shop" },
+  { type: "productBundles", label: "In bundles", icon: "heart", hint: "Bundles with this product", group: "shop" },
 ];
 
 export function newWidget(type: WidgetType): Node {
@@ -53,12 +60,19 @@ export function newWidget(type: WidgetType): Node {
     case "spacer": return w("spacer", {}, { minH: 48 });
     case "productTitle": return w("productTitle", { level: 1 });
     case "productPrice": return w("productPrice");
+    case "productOffers": return w("productOffers", { heading: "Offers" });
     case "productDescription": return w("productDescription");
     case "productGallery": return w("productGallery", { ratio: "4/5" });
     case "addToCart": return w("addToCart", { label: "Add to cart", qty: true });
     case "searchBox": return w("searchBox");
     case "dynamicTitle": return w("dynamicTitle", { source: "category", level: 1 });
     case "categoryNav": return w("categoryNav", { layout: "pills" });
+    case "searchFilters": return w("searchFilters", { layout: "sidebar", price: true, availability: true, category: true, maxValues: 8, heading: "Filter" });
+    case "resultsBar": return w("resultsBar", { showCount: true, sort: true });
+    case "productSpecs": return w("productSpecs", { heading: "Details" });
+    case "productVariants": return w("productVariants", { swatches: true, showSoldOut: true, disabledStyle: "faded" });
+    case "bundleContents": return w("bundleContents", { heading: "What's in the set", images: true });
+    case "productBundles": return w("productBundles", { heading: "As seen in these bundles", limit: 4, cols: 4 });
   }
 }
 
@@ -153,7 +167,10 @@ export const PAGE_TEMPLATES: PageTemplate[] = [
 export interface SystemPage { key: "product" | "category" | "search"; name: string; blurb: string; build: () => Node[] }
 const hdr = () => SECTION_TEMPLATES.find((t) => t.key === "header")!.build();
 const ftr = () => SECTION_TEMPLATES.find((t) => t.key === "footer")!.build();
-const results = (limit = 24) => sec([col(12, [w("productGrid", { source: "results", limit, cols: 4 })])], { padT: 24 });
+const results = (limit = 24) => sec([
+  col(3, [w("searchFilters", { layout: "sidebar", price: true, availability: true, category: true, maxValues: 8, heading: "Filter" })]),
+  col(9, [w("resultsBar", { showCount: true, sort: true }), w("productGrid", { source: "results", limit, cols: 3, paginate: true })], { gap: 18 }),
+], { padT: 24 });
 
 /** The pages every shop needs. They are designed once and reused for every product, category and search. */
 export const SYSTEM_PAGES: SystemPage[] = [
@@ -161,8 +178,9 @@ export const SYSTEM_PAGES: SystemPage[] = [
       hdr(),
       sec([
         col(6, [w("productGallery", { ratio: "4/5" })]),
-        col(6, [w("productTitle", { level: 1 }, { size: 52 }), w("productPrice"), w("productDescription", {}, { size: 18 }), w("addToCart")], { valign: "center", gap: 22 }),
+        col(6, [w("productTitle", { level: 1 }, { size: 52 }), w("productPrice"), w("productOffers", { heading: "Offers" }), w("productVariants", { swatches: true, showSoldOut: true, disabledStyle: "faded" }), w("productDescription", {}, { size: 18 }), w("addToCart"), w("bundleContents", { heading: "What's in the set", images: true }), w("productSpecs", { heading: "Details" })], { valign: "center", gap: 22 }),
       ], { padT: 56, padB: 72 }),
+      sec([col(12, [w("productBundles", { heading: "As seen in these bundles", limit: 4, cols: 4 })])], { padT: 8, padB: 24 }),
       sec([col(12, [w("heading", { text: "You may also like", level: 3 })]), col(12, [w("productGrid", { limit: 4, cols: 4 })])], { bg: { kind: "color", color: "var(--surface)" }, padT: 64, padB: 72 }),
       ftr(),
   ] },

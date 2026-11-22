@@ -5,7 +5,7 @@
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
-    "paths": { "@openshop/renderer": ["../../packages/renderer/src/index.ts"] },
+    "paths": { "@openshop/renderer": ["../../packages/renderer/src/index.ts"], "@openshop/pricing": ["../../packages/pricing/src/index.ts"], "@openshop/iam": ["../../packages/iam/src/index.ts"] },
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": false,
     "noImplicitReturns": true,

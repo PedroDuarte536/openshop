@@ -1,0 +1,4 @@
+Product ID;Active (0/1);Name *;Categories (x,y,z...);Price tax excluded;Reference #;Quantity;Summary;Description;Image URLs (x,y,z...)
+101;1;Olive Oil Cruet;Home,Kitchen,Vases & planters;34,00;PS-OLIVE-CRUET;5;<p>Short text</p>;"<p>A hand-thrown cruet with a <strong>cork stopper</strong>.</p><ul><li>250 ml</li><li>Food safe glaze</li></ul><script>alert('x')</script>";
+102;0;Butter Dish;Home,Kitchen,Plates & platters;27,50;PS-BUTTER-DISH;8;;"<p>Keeps a 250 g block soft&nbsp;&amp;&nbsp;covered.</p><img src=x onerror=alert(1)>";
+103;1;Spoon Rest;Home,Kitchen;12,00;PS-SPOON-REST;20;;<p>Small, heavy and easy to wipe.</p>;

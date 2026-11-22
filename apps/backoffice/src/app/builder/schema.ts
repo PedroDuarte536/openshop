@@ -65,11 +65,13 @@ export const PROP_FIELDS = {
     { key: 'categoryId', label: 'Category', kind: 'category' },
     { key: 'limit', label: 'How many', kind: 'number', min: 1, max: 48 },
     { key: 'cols', label: 'Columns', kind: 'seg', options: [2, 3, 4, 5].map((n) => ({ v: n, label: String(n) })) },
+    { key: 'paginate', label: 'Show page numbers', kind: 'toggle', hint: 'For "This page\'s results": lets visitors browse every result, page by page.' },
   ],
 } as unknown as Record<NodeType, Field[]>;
 
 PROP_FIELDS.productTitle = [{ key: 'level', label: 'Heading level', kind: 'seg', options: [1, 2, 3].map((n) => ({ v: n, label: 'H' + n })) }];
 PROP_FIELDS.productPrice = [];
+PROP_FIELDS.productOffers = [{ key: 'heading', label: 'Heading', kind: 'text' }];
 PROP_FIELDS.productDescription = [];
 PROP_FIELDS.productGallery = [{ key: 'ratio', label: 'Shape', kind: 'select', options: RATIOS }];
 PROP_FIELDS.addToCart = [{ key: 'label', label: 'Button text', kind: 'text' }, { key: 'qty', label: 'Show quantity box', kind: 'toggle' }];
@@ -79,17 +81,45 @@ PROP_FIELDS.dynamicTitle = [
   { key: 'level', label: 'Heading level', kind: 'seg', options: [1, 2, 3].map((n) => ({ v: n, label: 'H' + n })) },
 ];
 PROP_FIELDS.categoryNav = [{ key: 'layout', label: 'Look', kind: 'seg', options: [{ v: 'pills', label: 'Pills' }, { v: 'list', label: 'List' }] }];
+PROP_FIELDS.searchFilters = [
+  { key: 'heading', label: 'Heading', kind: 'text' },
+  { key: 'layout', label: 'Layout', kind: 'seg', options: [{ v: 'sidebar', label: 'Sidebar' }, { v: 'bar', label: 'Across the page' }] },
+  { key: 'category', label: 'Category filter (search page)', kind: 'toggle' },
+  { key: 'price', label: 'Price filter', kind: 'toggle' },
+  { key: 'availability', label: '"In stock" filter', kind: 'toggle' },
+  { key: 'maxValues', label: 'Values shown before "Show all"', kind: 'number', min: 3, max: 20 },
+];
+PROP_FIELDS.resultsBar = [{ key: 'showCount', label: 'Number of results', kind: 'toggle' }, { key: 'sort', label: 'Sorting', kind: 'toggle' }];
+PROP_FIELDS.productSpecs = [{ key: 'heading', label: 'Heading', kind: 'text' }];
+PROP_FIELDS.bundleContents = [{ key: 'heading', label: 'Heading', kind: 'text' }, { key: 'images', label: 'Show photos', kind: 'toggle' }];
+PROP_FIELDS.productBundles = [
+  { key: 'heading', label: 'Heading', kind: 'text' },
+  { key: 'limit', label: 'How many', kind: 'number', min: 1, max: 12 },
+  { key: 'cols', label: 'Columns', kind: 'seg', options: [2, 3, 4, 5].map((n) => ({ v: n, label: String(n) })) },
+];
+PROP_FIELDS.productVariants = [
+  { key: 'swatches', label: 'Colour swatches', kind: 'toggle', hint: 'When the property values have a colour' },
+  { key: 'showSoldOut', label: 'Mark sold-out variants', kind: 'toggle' },
+  { key: 'disabledStyle', label: 'Unavailable choices', kind: 'seg', options: [{ v: 'faded', label: 'Faded' }, { v: 'struck', label: 'Crossed out' }] },
+];
 
 /** Shown at the top of a widget's Content tab. */
 export const NOTES: Partial<Record<NodeType, string>> = {
   productTitle: 'Shows the name of the product being viewed. You see a sample here; visitors see the real product.',
-  productPrice: 'Shows the price of the product being viewed. Sample data here.',
+  productPrice: 'Shows the price of the product being viewed. Visitors with a discount see their price, the original price and a badge. Sample sale shown here.',
+  productOffers: 'Lists the offers that apply to the product for each visitor: the one applied, where it comes from, and what other offers would cost. Filled in live from your Discounts; sample data here.',
   productDescription: 'Shows the product description. Sample data here.',
   productGallery: "Shows the product's photos. Sample artwork here.",
   addToCart: 'Adds the product being viewed to the cart.',
   searchBox: 'Visitors type here and land on the search results page.',
   dynamicTitle: 'Shows the category name, or the words someone searched for. Sample data here.',
   categoryNav: 'Lists your categories so visitors can browse. Uses your real categories.',
+  searchFilters: 'Filters for category and search pages: category, price, availability and the properties you marked "shoppers can filter by it", each with the number of matching products. Sample data here.',
+  resultsBar: 'Shows how many products match and lets visitors sort them. Price sorting uses each visitor\'s own prices.',
+  productSpecs: 'Lists the product\'s properties marked "shown on the product page". Sample data here.',
+  productVariants: 'For products linked as variants: one line per property that tells them apart, one choice per value. A choice opens the product that differs only in that property; otherwise it is shown as unavailable. Sample data here.',
+  bundleContents: 'For bundles: the products inside and, for a price you set below their total, what shoppers save. Sample data here.',
+  productBundles: 'The visible bundles that contain the product being viewed. Sample data here.',
 };
 
 export const ARTS = [...ART_KEYS];

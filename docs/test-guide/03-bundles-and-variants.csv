@@ -1,0 +1,8 @@
+sku,type,name,price,stock,category,attr:colour,bundle_components,bundle_pricing,bundle_offers,variant_group,variant_by,variant_position
+MD-TEA-FOR-ONE,bundle,Tea for One,,,gifts,,MD-TALL-LATTE-MUG*1|MD-TRINKET-DISH*1,sum,targeted,,,
+MD-GIFT-CANDLE-SET,bundle,Candle Night,39.00,,gifts,,MD-CANDLE-HOLDER*2|MD-SALT-CELLAR*1,manual,all,,,
+MD-BAD-BUNDLE,bundle,Bundle in a bundle,,,gifts,,MD-BREAKFAST-FOR-TWO*1|MD-LINEN-MUG*1,sum,targeted,,,
+MD-SAGE-ESPRESSO,simple,Espresso Cup Sage,16.00,10,mugs,Sage,,,,espresso-cup,colour,1
+MD-DUNE-ESPRESSO-CUP,simple,Dune Espresso Cup,,,,,,,,espresso-cup,colour,0
+MD-INK-ESPRESSO,simple,Espresso Cup Ink,16.00,10,mugs,Ink blue,,,,espresso-cup,colour,2
+MD-INK-ESPRESSO-2,simple,Espresso Cup Ink (again),16.00,10,mugs,Ink blue,,,,espresso-cup,colour,3

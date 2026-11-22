@@ -1,0 +1,253 @@
+import { newSection, newWidget, type Node, type WidgetType } from '@openshop/renderer';
+import { Inspector } from './inspector';
+import { BuilderStore } from './store';
+import { mount, button, Mounted } from '../testing/harness';
+import { categories } from '../testing/fixtures';
+
+type M = Mounted<Inspector>;
+async function setup(widgets: WidgetType[] = ['heading']) {
+  const m = await mount(Inspector, { providers: [BuilderStore] });
+  await m.reply('GET', '/api/categories', categories);
+  const store = m.cmp.store;
+  const s = newSection([6, 6]);
+  const ws = widgets.map((w) => newWidget(w));
+  s.children![0].children = ws;
+  store.load({ title: 'Page', nodes: [s] });
+  await m.settle();
+  return { m, store, s, ws };
+}
+/** The control (slider, seg, colour) whose heading is `label`. */
+const ctl = (m: M, label: string) => {
+  const c = m.all('.ctl').find((x) => x.querySelector('.ctl-h span')?.textContent === label);
+  if (!c) throw new Error(`no control ${label}`);
+  return c;
+};
+const slide = async (m: M, label: string, v: string) => { const i = ctl(m, label).querySelector('input[type=number]') as HTMLInputElement; i.value = v; i.dispatchEvent(new Event('input')); await m.settle(); };
+const seg = async (m: M, label: string, option: string) => m.click(button(ctl(m, label), option, '.seg button'));
+/** The on/off switch labelled `label`. */
+const toggle = (m: M, label: string) => {
+  const s = m.all('label.sw').find((x) => x.querySelector('span')?.textContent === label);
+  if (!s) throw new Error(`no switch ${label}`);
+  return s.querySelector('input') as HTMLElement;
+};
+const field = (m: M, label: string) => {
+  const f = m.all('label.field, div.field').find((x) => x.querySelector('span')?.textContent === label);
+  if (!f) throw new Error(`no field ${label}`);
+  return f;
+};
+
+describe('builder inspector: page design', () => {
+  it('applies themes, colours, fonts, roundness, currency and whole-page templates', async () => {
+    const { m, store } = await setup();
+    expect(m.text('.ins-title')).toBe('Page design');
+    await m.click(m.all('.presets .preset')[1]);
+    const primary = store.doc().theme.primary;
+    expect(primary).not.toBe('#2B4BFF');
+    const hex = ctl(m, 'Primary').querySelector('input.hex') as HTMLInputElement;
+    hex.value = '#112233'; hex.dispatchEvent(new Event('change')); await m.settle();
+    expect(store.doc().theme.primary).toBe('#112233');
+    hex.value = 'var(--accent)'; hex.dispatchEvent(new Event('change')); await m.settle();
+    expect(store.doc().theme.primary).toBe('#112233');
+    await m.click(m.all('.fonts .font')[0]);
+    expect(store.doc().theme.font).toBe('editorial');
+    await slide(m, 'Corner roundness', '20');
+    expect(store.doc().theme.radius).toBe(20);
+    await m.type('input[maxlength="3"]', '$');
+    expect(store.doc().theme.currency).toBe('$');
+    await m.click(m.all('.tpl')[0]);
+    expect(m.text('.tpl')).toContain('Click again to replace everything');
+    await m.click(m.all('.tpl')[0]);
+    expect(store.doc().nodes.length).toBeGreaterThan(3);
+    expect(store.doc().title).toBe('Page');
+  });
+});
+
+describe('builder inspector: content', () => {
+  it('sections: column layouts and width; columns and empty widgets explain themselves', async () => {
+    const { m, store, s } = await setup(['spacer']);
+    store.select(s.id); await m.settle();
+    expect(m.text('.crumbs')).toBe('Section');
+    expect(m.all('.lay.on').length).toBe(1);
+    await m.click(m.all('.lay')[2]);
+    expect(store.find(s.id)!.children!.length).toBe(3);
+    await seg(m, 'Content width', 'Edge to edge');
+    expect((store.find(s.id)!.props as { width: string }).width).toBe('full');
+    store.select(s.children![0].id); await m.settle();
+    expect(m.text('.note')).toContain('Drag widgets from the left');
+    store.select(store.find(s.id)!.children![0].children![0].id); await m.settle();
+    expect(m.text('.note')).toContain('Nothing to edit here');
+    expect(m.text('.crumbs')).toBe('Section/Column/Spacer');
+    await m.click(button(m.el, 'Column', '.crumbs button'));
+    expect(store.selected()!.type).toBe('column');
+  });
+
+  it('edits text, links, choices, toggles and numbers', async () => {
+    const { m, store, ws } = await setup(['heading', 'button', 'productGrid', 'image']);
+    const [h, b, g, img] = ws;
+    store.select(h.id); await m.settle();
+    const ta = field(m, 'Text').querySelector('textarea')!;
+    ta.value = 'Hello'; ta.dispatchEvent(new Event('input')); await m.settle();
+    expect((store.find(h.id)!.props as { text: string }).text).toBe('Hello');
+    await seg(m, 'Level', 'H3');
+    expect((store.find(h.id)!.props as { level: number }).level).toBe(3);
+    await m.click(toggle(m, 'Gradient text'));
+    expect((store.find(h.id)!.props as { grad: boolean }).grad).toBe(true);
+    store.select(b.id); await m.settle();
+    const url = field(m, 'Link').querySelector('input')!;
+    url.value = '/shop/cart'; url.dispatchEvent(new Event('input')); await m.settle();
+    expect((store.find(b.id)!.props as { href: string }).href).toBe('/shop/cart');
+    const lbl = field(m, 'Second button label').querySelector('input')!;
+    lbl.value = 'More'; lbl.dispatchEvent(new Event('input')); await m.settle();
+    expect(m.text('small')).toContain('Leave empty for a single button');
+    store.select(g.id); await m.settle();
+    const cat = field(m, 'Category').querySelector('select')!;
+    expect([...cat.options].map((o) => o.text)).toEqual(['All products', 'Mugs', 'Vases']);
+    cat.value = 'c-vases'; cat.dispatchEvent(new Event('change')); await m.settle();
+    expect((store.find(g.id)!.props as { categoryId: string }).categoryId).toBe('c-vases');
+    await slide(m, 'How many', '8');
+    expect((store.find(g.id)!.props as { limit: number }).limit).toBe(8);
+    await slide(m, 'How many', '');
+    expect((store.find(g.id)!.props as { limit: number }).limit).toBe(1);
+    store.select(img.id); await m.settle();
+    const shape = field(m, 'Shape').querySelector('select')!;
+    shape.value = '16/9'; shape.dispatchEvent(new Event('change')); await m.settle();
+    expect((store.find(img.id)!.props as { ratio: string }).ratio).toBe('16/9');
+  });
+
+  it('icons, artwork, photos (upload and its errors) and repeated items', async () => {
+    const { m, store, ws } = await setup(['iconBox', 'image', 'faq', 'gallery', 'productOffers']);
+    const [ib, img, faq, gal, offers] = ws;
+    store.select(ib.id); await m.settle();
+    await m.click(m.all('.icons .ico')[2]);
+    expect((store.find(ib.id)!.props as { icon: string }).icon).toBe('truck');
+    store.select(img.id); await m.settle();
+    await m.click(m.all('.arts .art')[2]);
+    expect((store.find(img.id)!.props as { art: string }).art).toBe('sunset');
+    await m.click(m.all('.arts .art.none')[0]);
+    expect((store.find(img.id)!.props as { art: string }).art).toBe('');
+    const file = m.el.querySelector('.upl input[type=file]') as HTMLInputElement;
+    Object.defineProperty(file, 'files', { value: [new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })], configurable: true });
+    file.dispatchEvent(new Event('change')); await m.settle();
+    await m.reply('POST', '/api/uploads', { url: '/uploads/abc.png' });
+    expect((store.find(img.id)!.props as { src: string }).src).toBe('/uploads/abc.png');
+    expect(m.el.querySelector('.upl img')!.getAttribute('src')).toBe('/uploads/abc.png');
+    file.dispatchEvent(new Event('change')); await m.settle();
+    await m.reply('POST', '/api/uploads', { error: 'unsupported or corrupt image' }, 400);
+    expect(m.text('small.err')).toBe('unsupported or corrupt image');
+    await m.click(button(m.el, 'Remove', '.upl-b button'));
+    expect((store.find(img.id)!.props as { src: string }).src).toBe('');
+    Object.defineProperty(file, 'files', { value: [], configurable: true });
+    file.dispatchEvent(new Event('change')); await m.settle();
+    m.http.expectNone('/api/uploads');
+    store.select(faq.id); await m.settle();
+    expect(m.all('.item').length).toBe(2);
+    await m.click(button(m.el, '+ Add question'));
+    expect(m.all('.item').length).toBe(3);
+    await m.click(m.all('.item .x')[0]);
+    expect((store.find(faq.id)!.props as { items: unknown[] }).items.length).toBe(2);
+    const q = m.all('.item')[0].querySelector('input')!;
+    q.value = 'Why?'; q.dispatchEvent(new Event('input')); await m.settle();
+    expect((store.find(faq.id)!.props as { items: { q: string }[] }).items[0].q).toBe('Why?');
+    store.select(gal.id); await m.settle();
+    await m.click(m.all('.item .arts.sm .art')[1]);
+    expect((store.find(gal.id)!.props as { items: { art: string }[] }).items[0].art).toBe('sunset');
+    store.select(offers.id); await m.settle();
+    expect(m.text('.shopnote')).toContain('Lists the offers that apply to the product');
+    const heading = field(m, 'Heading').querySelector('input')!;
+    heading.value = 'Deals'; heading.dispatchEvent(new Event('input')); await m.settle();
+    expect((store.find(offers.id)!.props as { heading: string }).heading).toBe('Deals');
+  });
+});
+
+describe('builder inspector: style', () => {
+  it('styles per device, with overrides shown and resettable', async () => {
+    const { m, store, ws, s } = await setup(['heading', 'spacer', 'divider']);
+    const [h, sp, dv] = ws;
+    store.select(h.id); await m.settle();
+    await m.click(button(m.el, 'Style', '.tabs2 button'));
+    await slide(m, 'Max width', '600');
+    await slide(m, 'Min height', '100');
+    await slide(m, 'Top', '10');
+    await slide(m, 'Space above', '12');
+    await seg(m, 'Alignment', 'Center');
+    await slide(m, 'Size', '40');
+    await seg(m, 'Weight', 'Bold');
+    await seg(m, 'Shadow', 'Soft');
+    await slide(m, 'Corner radius', '8');
+    await seg(m, 'Appears with', 'Rise');
+    expect(store.find(h.id)!.style).toMatchObject({ maxW: 600, minH: 100, padT: 10, marT: 12, align: 'center', size: 40, weight: 700, shadow: 1, radius: 8, anim: 'rise' });
+    await m.click(button(m.el, 'Mobile', '.devbanner button'));
+    expect(m.text('.note.tiny')).toContain('only affect mobile screens');
+    await slide(m, 'Size', '24');
+    expect(store.find(h.id)!.responsive!.mobile).toEqual({ size: 24 });
+    expect(ctl(m, 'Size').querySelector('.dot')).not.toBeNull();
+    await m.click(button(m.el, 'Reset all mobile changes'));
+    expect(store.find(h.id)!.responsive).toBeUndefined();
+    await m.click(m.all('.hides input')[2]);
+    expect(store.find(h.id)!.hide).toEqual(['mobile']);
+    await m.click(toggle(m, 'Hide on tablet'));
+    expect(store.find(h.id)!.hide).toEqual(['tablet', 'mobile']);
+    // Regression: leaving a typed number (or releasing a range slider) fires a native change event; the value stays.
+    const gap = ctl(m, 'Space below').querySelector('input[type=number]') as HTMLInputElement;
+    gap.value = '30'; gap.dispatchEvent(new Event('input')); gap.dispatchEvent(new Event('change', { bubbles: true })); await m.settle();
+    const range = ctl(m, 'Space below').querySelector('input[type=range]') as HTMLInputElement;
+    range.dispatchEvent(new Event('change', { bubbles: true })); await m.settle();
+    expect(store.find(h.id)!.responsive!.mobile!.marB).toBe(30);
+    const hex = ctl(m, 'Colour').querySelector('input.hex') as HTMLInputElement;
+    hex.value = '#AB1234'; hex.dispatchEvent(new Event('change', { bubbles: true })); await m.settle();
+    expect(store.find(h.id)!.responsive!.mobile!.color).toBe('#AB1234');
+    await m.click(button(m.el, 'Desktop', '.devbanner button'));
+    store.select(sp.id); await m.settle();
+    expect(ctl(m, 'Height')).toBeTruthy();
+    store.select(dv.id); await m.settle();
+    expect(m.all('.ctl-h span').map((x) => x.textContent)).not.toContain('Min height');
+    store.select(s.id); await m.settle();
+    await seg(m, 'Vertical alignment', 'Middle');
+    await slide(m, 'Gap', '20');
+    await slide(m, 'Content width', '1000');
+    await slide(m, 'Left', '8');
+    expect(store.find(s.id)!.style).toMatchObject({ valign: 'center', gap: 20, maxW: 1000, padL: 8 });
+    store.select(s.children![1].id); await m.settle();
+    await slide(m, 'Width (of 12)', '4');
+    await seg(m, 'Stack', 'Side by side');
+    expect(store.find(s.children![1].id)!.style).toMatchObject({ span: 4, dir: 'row' });
+  });
+
+  it('backgrounds: colour, gradient, artwork, photo with overlay, none', async () => {
+    const { m, store, s } = await setup(['text']);
+    store.select(s.id); await m.settle();
+    await m.click(button(m.el, 'Style', '.tabs2 button'));
+    const bg = () => store.find(s.id)!.style.bg!;
+    const kinds = () => m.all('.grp').find((g) => g.querySelector('h4')?.textContent === 'Background')!;
+    await m.click(button(kinds(), 'Colour', '.seg button'));
+    expect(bg()).toEqual({ kind: 'color', color: 'var(--surface)' });
+    await m.click(kinds().querySelectorAll('.ctl .chip')[5] as HTMLElement);
+    expect(bg().color).toBe('#ffffff');
+    await m.click(button(kinds(), 'Gradient', '.seg button'));
+    await slide(m, 'Angle', '90');
+    await m.click(ctl(m, 'From').querySelectorAll('.chip')[6] as HTMLElement);
+    await m.click(ctl(m, 'To').querySelectorAll('.chip')[5] as HTMLElement);
+    expect(bg()).toMatchObject({ kind: 'gradient', from: '#000000', to: '#ffffff', angle: 90 });
+    await slide(m, 'Angle', '');
+    expect(bg().angle).toBe(135);
+    await m.click(button(kinds(), 'Artwork', '.seg button'));
+    await m.click(kinds().querySelectorAll('.arts .art')[3] as HTMLElement);
+    expect(bg()).toEqual({ kind: 'preset', preset: 'dusk' });
+    await m.click(button(kinds(), 'Photo', '.seg button'));
+    await slide(m, 'Dark overlay', '0.5');
+    expect(bg()).toMatchObject({ kind: 'image', overlay: 0.5 });
+    await slide(m, 'Dark overlay', '');
+    expect(bg().overlay).toBe(0.35);
+    const file = kinds().querySelector('input[type=file]') as HTMLInputElement;
+    Object.defineProperty(file, 'files', { value: [new File([new Uint8Array([1])], 'b.jpg', { type: 'image/jpeg' })] });
+    file.dispatchEvent(new Event('change')); await m.settle();
+    await m.reply('POST', '/api/uploads', { url: '/uploads/b.jpg' });
+    expect(bg().image).toBe('/uploads/b.jpg');
+    await m.click(button(kinds(), 'None', '.seg button'));
+    expect(store.find(s.id)!.style.bg).toBeUndefined();
+    await m.click(button(m.el, 'Tablet', '.devbanner button'));
+    await m.click(button(kinds(), 'None', '.seg button'));
+    expect(store.find(s.id)!.responsive!.tablet!.bg).toEqual({ kind: 'none' });
+    expect(m.cmp.hasOverrides(store.find(s.id) as Node)).toBe(true);
+  });
+});

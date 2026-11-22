@@ -1,6 +1,10 @@
 import { Component, input, output } from '@angular/core';
 import type { Theme } from '@openshop/renderer';
 
+// These controls report their value through an output named `change`. Native `change` events from their inner inputs
+// bubble to the same (change) listener on the host element, which would then run a second time with the DOM event
+// (clearing a style, or undoing a toggle). So every inner native `change` event stops at the control's boundary.
+
 @Component({
   selector: 'os-slider',
   template: `
@@ -11,8 +15,8 @@ import type { Theme } from '@openshop/renderer';
         @if (value() !== undefined) { <button class="rst" (click)="change.emit(undefined)" title="Reset">Reset</button> }
       </div>
       <div class="ctl-r">
-        <input type="range" [min]="min()" [max]="max()" [step]="step()" [value]="value() ?? placeholder() ?? min()" (input)="emit($event)">
-        <input type="number" class="num" [value]="value() ?? ''" [placeholder]="placeholder() ?? ''" (input)="emit($event)">
+        <input type="range" [min]="min()" [max]="max()" [step]="step()" [value]="value() ?? placeholder() ?? min()" (input)="emit($event)" (change)="$event.stopPropagation()">
+        <input type="number" class="num" [value]="value() ?? ''" [placeholder]="placeholder() ?? ''" (input)="emit($event)" (change)="$event.stopPropagation()">
         <span class="u">{{ unit() }}</span>
       </div>
     </div>`,
@@ -49,7 +53,7 @@ export class OsSeg {
   template: `
     <label class="sw">
       <span>{{ label() }}</span>
-      <input type="checkbox" [checked]="value()" (change)="change.emit($any($event.target).checked)">
+      <input type="checkbox" [checked]="value()" (change)="$event.stopPropagation(); change.emit($any($event.target).checked)">
       <i></i>
     </label>`,
 })
@@ -72,7 +76,7 @@ export class OsSwitch {
           <button type="button" class="chip" [class.on]="value() === c.v" [style.background]="c.css" [title]="c.name" (click)="change.emit(c.v)"></button>
         }
         <label class="pick" title="Custom colour">
-          <input type="color" [value]="hex()" (input)="change.emit($any($event.target).value)">
+          <input type="color" [value]="hex()" (input)="change.emit($any($event.target).value)" (change)="$event.stopPropagation()">
         </label>
         <input class="hex" [value]="value() ?? ''" placeholder="#hex" maxlength="9" (change)="commit($event)">
       </div>
@@ -91,5 +95,5 @@ export class OsColor {
     ];
   }
   hex() { const v = this.value(); if (v && /^#[0-9a-f]{6}$/i.test(v)) return v; const m = this.chips().find((c) => c.v === v); return m && /^#[0-9a-f]{6}$/i.test(m.css) ? m.css : '#000000'; }
-  commit(e: Event) { const v = (e.target as HTMLInputElement).value.trim(); this.change.emit(v === '' ? undefined : v); }
+  commit(e: Event) { e.stopPropagation(); const v = (e.target as HTMLInputElement).value.trim(); this.change.emit(v === '' ? undefined : v); }
 }

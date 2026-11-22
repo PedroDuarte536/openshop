@@ -1,0 +1,1618 @@
+{
+ "_comment": "The access matrix of docs/iam-plan-v2.md \u00a72.12 as data. Read by apps/api/test/access-matrix.test.ts, scripts/e2e-access.py and scripts/seed-demo.py. 'allowed' is the reviewed expectation; 'needs' is the rule; the test checks that both agree.",
+ "password": "dune-staff-2026",
+ "personas": [
+  {
+   "id": "olivia",
+   "name": "Olivia Owner",
+   "sudo": true,
+   "groups": [],
+   "note": "owner (sudo)",
+   "email": "olivia@maison-dune.test"
+  },
+  {
+   "id": "sam",
+   "name": "Sam Manager",
+   "groups": [
+    "shop-manager"
+   ],
+   "email": "sam@maison-dune.test"
+  },
+  {
+   "id": "pat",
+   "name": "Pat Packer",
+   "groups": [
+    "fulfilment"
+   ],
+   "email": "pat@maison-dune.test"
+  },
+  {
+   "id": "cleo",
+   "name": "Cleo Catalogue",
+   "groups": [
+    "catalogue-editor"
+   ],
+   "email": "cleo@maison-dune.test"
+  },
+  {
+   "id": "dana",
+   "name": "Dana Designer",
+   "groups": [
+    "content-editor"
+   ],
+   "email": "dana@maison-dune.test"
+  },
+  {
+   "id": "max",
+   "name": "Max Marketing",
+   "groups": [
+    "promotions"
+   ],
+   "email": "max@maison-dune.test"
+  },
+  {
+   "id": "suki",
+   "name": "Suki Support",
+   "groups": [
+    "customer-support"
+   ],
+   "email": "suki@maison-dune.test"
+  },
+  {
+   "id": "finn",
+   "name": "Finn Finance",
+   "groups": [
+    "finance"
+   ],
+   "email": "finn@maison-dune.test"
+  },
+  {
+   "id": "vera",
+   "name": "Vera Viewer",
+   "groups": [
+    "read-only"
+   ],
+   "email": "vera@maison-dune.test"
+  },
+  {
+   "id": "nico",
+   "name": "Nico NoGroups",
+   "groups": [],
+   "email": "nico@maison-dune.test"
+  },
+  {
+   "id": "mia",
+   "name": "Mia Multi",
+   "groups": [
+    "fulfilment",
+    "content-editor"
+   ],
+   "email": "mia@maison-dune.test"
+  },
+  {
+   "id": "ivy",
+   "name": "Ivy Invited",
+   "groups": [
+    "fulfilment"
+   ],
+   "state": "invited",
+   "email": "ivy@maison-dune.test"
+  },
+  {
+   "id": "sid",
+   "name": "Sid Suspended",
+   "groups": [
+    "fulfilment"
+   ],
+   "state": "suspended",
+   "email": "sid@maison-dune.test"
+  },
+  {
+   "id": "rex",
+   "name": "Rex Removed",
+   "groups": [
+    "fulfilment"
+   ],
+   "state": "removed",
+   "email": "rex@maison-dune.test"
+  }
+ ],
+ "rows": [
+  {
+   "id": "C1",
+   "label": "See products and categories",
+   "needs": "catalog.view",
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "cleo",
+    "dana",
+    "max",
+    "finn",
+    "vera",
+    "mia"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/products",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/products/{product}",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/categories",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "C2",
+   "label": "Update stock only",
+   "needs": {
+    "any": [
+     "catalog.stock",
+     "catalog.manage"
+    ]
+   },
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "cleo",
+    "mia"
+   ],
+   "api": [
+    {
+     "method": "PATCH",
+     "url": "/api/products/{product}",
+     "status": 200,
+     "body": {
+      "stock": 100000
+     }
+    }
+   ]
+  },
+  {
+   "id": "C3",
+   "label": "Create or edit a product (price, text, images, active)",
+   "needs": "catalog.manage",
+   "allowed": [
+    "olivia",
+    "sam",
+    "cleo"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/products",
+     "status": 201,
+     "body": {
+      "name": "Matrix vase {uniq}",
+      "price": 12,
+      "stock": 3
+     }
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/products/{product}",
+     "status": 200,
+     "body": {
+      "price": 24
+     }
+    }
+   ]
+  },
+  {
+   "id": "C4",
+   "label": "Delete a product",
+   "needs": "catalog.manage",
+   "allowed": [
+    "olivia",
+    "sam",
+    "cleo"
+   ],
+   "api": [
+    {
+     "method": "DELETE",
+     "url": "/api/products/{fresh.hiddenProduct}",
+     "status": 204
+    }
+   ]
+  },
+  {
+   "id": "C5",
+   "label": "Create or delete a category",
+   "needs": "catalog.manage",
+   "allowed": [
+    "olivia",
+    "sam",
+    "cleo"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/categories",
+     "status": 201,
+     "body": {
+      "name": "Matrix {uniq}",
+      "slug": "matrix-{uniq}"
+     }
+    },
+    {
+     "method": "DELETE",
+     "url": "/api/categories/{fresh.category}",
+     "status": 204
+    }
+   ]
+  },
+  {
+   "id": "C6",
+   "label": "Upload an image",
+   "needs": {
+    "any": [
+     "catalog.manage",
+     "pages.manage"
+    ]
+   },
+   "allowed": [
+    "olivia",
+    "sam",
+    "cleo",
+    "dana",
+    "mia"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/uploads",
+     "status": 201,
+     "png": true
+    }
+   ]
+  },
+  {
+   "id": "C7",
+   "label": "Catalogue extras (read): delete impact, properties, variant groups, import history",
+   "needs": "catalog.view",
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "cleo",
+    "dana",
+    "max",
+    "finn",
+    "vera",
+    "mia"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/products/{product}/delete-impact",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/attributes",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/variant-groups",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/variant-groups/{uniq}",
+     "status": 404
+    },
+    {
+     "method": "GET",
+     "url": "/api/catalogue/limits",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/catalogue/imports",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/catalogue/imports/{uniq}",
+     "status": 404
+    },
+    {
+     "method": "GET",
+     "url": "/api/catalogue/imports/{uniq}/rows",
+     "status": 404
+    }
+   ]
+  },
+  {
+   "id": "C8",
+   "label": "Catalogue extras (change): restore, bulk, properties, variant groups, imports",
+   "needs": "catalog.manage",
+   "allowed": [
+    "olivia",
+    "sam",
+    "cleo"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/products/{fresh.deletedProduct}/restore",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/products/bulk",
+     "status": 400,
+     "body": {}
+    },
+    {
+     "method": "POST",
+     "url": "/api/attributes",
+     "status": 400,
+     "body": {}
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/attributes/{uniq}",
+     "status": 400,
+     "body": {}
+    },
+    {
+     "method": "DELETE",
+     "url": "/api/attributes/{uniq}",
+     "status": 404
+    },
+    {
+     "method": "POST",
+     "url": "/api/variant-groups/suggest",
+     "status": 400,
+     "body": {}
+    },
+    {
+     "method": "POST",
+     "url": "/api/variant-groups",
+     "status": 400,
+     "body": {}
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/variant-groups/{uniq}",
+     "status": 400,
+     "body": {}
+    },
+    {
+     "method": "POST",
+     "url": "/api/variant-groups/{uniq}/variants",
+     "status": 400,
+     "body": {}
+    },
+    {
+     "method": "DELETE",
+     "url": "/api/variant-groups/{uniq}",
+     "status": 404
+    },
+    {
+     "method": "POST",
+     "url": "/api/catalogue/imports",
+     "status": 400
+    },
+    {
+     "method": "PUT",
+     "url": "/api/catalogue/imports/{uniq}",
+     "status": 404,
+     "body": {}
+    },
+    {
+     "method": "POST",
+     "url": "/api/catalogue/imports/{uniq}/preview",
+     "status": 404
+    },
+    {
+     "method": "POST",
+     "url": "/api/catalogue/imports/{uniq}/decisions",
+     "status": 400,
+     "body": {}
+    },
+    {
+     "method": "POST",
+     "url": "/api/catalogue/imports/{uniq}/commit",
+     "status": 400,
+     "body": {}
+    },
+    {
+     "method": "POST",
+     "url": "/api/catalogue/imports/{uniq}/cancel",
+     "status": 404
+    }
+   ]
+  },
+  {
+   "id": "O1",
+   "label": "See orders",
+   "needs": "orders.view",
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "suki",
+    "finn",
+    "vera",
+    "mia"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/orders",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "O2",
+   "label": "Mark shipped",
+   "needs": "orders.fulfil",
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "mia"
+   ],
+   "api": [
+    {
+     "method": "PATCH",
+     "url": "/api/orders/{fresh.order}",
+     "status": 200,
+     "body": {
+      "status": "shipped"
+     }
+    }
+   ]
+  },
+  {
+   "id": "O3",
+   "label": "Mark paid / back to pending",
+   "needs": "orders.payments",
+   "allowed": [
+    "olivia",
+    "sam",
+    "finn"
+   ],
+   "api": [
+    {
+     "method": "PATCH",
+     "url": "/api/orders/{fresh.order}",
+     "status": 200,
+     "body": {
+      "status": "paid"
+     }
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/orders/{fresh.order}",
+     "status": 200,
+     "body": {
+      "status": "pending"
+     }
+    }
+   ]
+  },
+  {
+   "id": "O4",
+   "label": "Cancel an order",
+   "needs": "orders.cancel",
+   "allowed": [
+    "olivia",
+    "sam",
+    "suki"
+   ],
+   "api": [
+    {
+     "method": "PATCH",
+     "url": "/api/orders/{fresh.order}",
+     "status": 200,
+     "body": {
+      "status": "cancelled"
+     }
+    }
+   ]
+  },
+  {
+   "id": "O5",
+   "label": "Reopen a cancelled order (to pending)",
+   "needs": {
+    "all": [
+     "orders.cancel",
+     "orders.payments"
+    ]
+   },
+   "allowed": [
+    "olivia",
+    "sam"
+   ],
+   "api": [
+    {
+     "method": "PATCH",
+     "url": "/api/orders/{fresh.cancelledOrder}",
+     "status": 200,
+     "body": {
+      "status": "pending"
+     }
+    }
+   ]
+  },
+  {
+   "id": "U1",
+   "label": "See customers and detail",
+   "needs": "customers.view",
+   "allowed": [
+    "olivia",
+    "sam",
+    "suki",
+    "vera"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/customers",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/customers/{customer}",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/audit?entity=customer&id={customer}",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "U2",
+   "label": "Create or edit a customer",
+   "needs": "customers.manage",
+   "allowed": [
+    "olivia",
+    "sam",
+    "suki"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/customers",
+     "status": 201,
+     "body": {
+      "email": "matrix-{uniq}@buyer.test",
+      "name": "Matrix buyer"
+     }
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/customers/{customer}",
+     "status": 200,
+     "body": {
+      "address": "Rua das Flores 1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "U3",
+   "label": "Delete a customer",
+   "needs": "customers.delete",
+   "allowed": [
+    "olivia",
+    "sam"
+   ],
+   "api": [
+    {
+     "method": "DELETE",
+     "url": "/api/customers/{fresh.customer}",
+     "status": 204
+    }
+   ]
+  },
+  {
+   "id": "U4",
+   "label": "Customer activation/reset link; sign customer out",
+   "needs": "customers.accounts",
+   "allowed": [
+    "olivia",
+    "sam",
+    "suki"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/customers/{customer}/links",
+     "status": 201,
+     "body": {
+      "purpose": "activate"
+     }
+    },
+    {
+     "method": "POST",
+     "url": "/api/customers/{customer}/sign-out",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "D1",
+   "label": "See offers and profiles; simulator (no customer)",
+   "needs": "discounts.view",
+   "allowed": [
+    "olivia",
+    "sam",
+    "max",
+    "finn",
+    "vera"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/discounts",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/discounts/{discount}",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/discount-profiles",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/discount-profiles/{profile}",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/discounts/simulate",
+     "status": 200,
+     "body": {
+      "items": [
+       {
+        "productId": "{product}",
+        "qty": 1
+       }
+      ]
+     }
+    },
+    {
+     "method": "GET",
+     "url": "/api/audit?entity=discount&id={discount}",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "D2",
+   "label": "Simulate as a specific customer",
+   "needs": {
+    "all": [
+     "discounts.view",
+     "customers.view"
+    ]
+   },
+   "allowed": [
+    "olivia",
+    "sam",
+    "vera"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/discounts/simulate",
+     "status": 200,
+     "body": {
+      "items": [
+       {
+        "productId": "{product}",
+        "qty": 1
+       }
+      ],
+      "customerId": "{customer}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "D3",
+   "label": "Create, edit, pause, archive, delete offers; profiles",
+   "needs": "discounts.manage",
+   "allowed": [
+    "olivia",
+    "sam",
+    "max"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/discounts",
+     "status": 201,
+     "body": {
+      "name": "Matrix offer {uniq}",
+      "label": "5% off",
+      "effect": {
+       "type": "percent",
+       "bp": 500
+      },
+      "status": "paused"
+     }
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/discounts/{fresh.discount}",
+     "status": 200,
+     "body": {
+      "name": "Matrix offer renamed",
+      "version": 1
+     }
+    },
+    {
+     "method": "POST",
+     "url": "/api/discounts/{fresh.discount}/resume",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/discounts/{fresh.discount}/pause",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/discounts/{fresh.discount}/duplicate",
+     "status": 201
+    },
+    {
+     "method": "POST",
+     "url": "/api/discounts/{fresh.discount}/archive",
+     "status": 200
+    },
+    {
+     "method": "DELETE",
+     "url": "/api/discounts/{fresh.discount}",
+     "status": 204
+    },
+    {
+     "method": "POST",
+     "url": "/api/discount-profiles",
+     "status": 201,
+     "body": {
+      "name": "Matrix profile {uniq}",
+      "publicLabel": "Friends"
+     }
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/discount-profiles/{fresh.profile}",
+     "status": 200,
+     "body": {
+      "description": "edited",
+      "version": 1
+     }
+    },
+    {
+     "method": "DELETE",
+     "url": "/api/discount-profiles/{fresh.profile}",
+     "status": 204
+    }
+   ]
+  },
+  {
+   "id": "D4",
+   "label": "Offer for specific customers (client price)",
+   "needs": {
+    "all": [
+     "discounts.manage",
+     "customers.view"
+    ]
+   },
+   "allowed": [
+    "olivia",
+    "sam"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/discounts",
+     "status": 201,
+     "body": {
+      "name": "Client price {uniq}",
+      "label": "Your price",
+      "effect": {
+       "type": "percent",
+       "bp": 1000
+      },
+      "audience": {
+       "type": "customers",
+       "customerIds": [
+        "{customer}"
+       ]
+      },
+      "access": {
+       "requiresSignIn": true
+      },
+      "status": "paused"
+     }
+    }
+   ]
+  },
+  {
+   "id": "D5",
+   "label": "Voucher codes: list, generate, CSV, delete",
+   "needs": "discounts.codes",
+   "allowed": [
+    "olivia",
+    "sam",
+    "max"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/discounts/{voucher}/codes",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/discounts/{voucher}/codes",
+     "status": 200,
+     "accept": "text/csv"
+    },
+    {
+     "method": "POST",
+     "url": "/api/discounts/{voucher}/codes",
+     "status": 201,
+     "body": {
+      "generate": 2
+     }
+    },
+    {
+     "method": "DELETE",
+     "url": "/api/discounts/{voucher}/codes/{fresh.code}",
+     "status": 204
+    }
+   ]
+  },
+  {
+   "id": "D6",
+   "label": "Give a customer a personal code",
+   "needs": {
+    "all": [
+     "discounts.codes",
+     "customers.view"
+    ]
+   },
+   "allowed": [
+    "olivia",
+    "sam"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/discounts/{voucher}/codes",
+     "status": 201,
+     "body": {
+      "generate": 1,
+      "assignedCustomerId": "{customer}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "D7",
+   "label": "Offer redemptions",
+   "needs": {
+    "all": [
+     "discounts.view",
+     "orders.view"
+    ]
+   },
+   "allowed": [
+    "olivia",
+    "sam",
+    "finn",
+    "vera"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/discounts/{discount}/redemptions",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "D8",
+   "label": "See profile members",
+   "needs": {
+    "all": [
+     "discounts.view",
+     "customers.view"
+    ]
+   },
+   "allowed": [
+    "olivia",
+    "sam",
+    "vera"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/discount-profiles/{profile}/members",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "D9",
+   "label": "Change profile members",
+   "needs": {
+    "all": [
+     "discounts.manage",
+     "customers.view"
+    ]
+   },
+   "allowed": [
+    "olivia",
+    "sam"
+   ],
+   "api": [
+    {
+     "method": "POST",
+     "url": "/api/discount-profiles/{profile}/members",
+     "status": 200,
+     "body": {
+      "add": [
+       {
+        "customerId": "{customer}"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "P1",
+   "label": "Pages: list, open builder, save/publish, rename, delete",
+   "needs": "pages.manage",
+   "allowed": [
+    "olivia",
+    "sam",
+    "dana",
+    "mia"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/pages",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/pages",
+     "status": 201,
+     "body": {
+      "slug": "matrix-{uniq}",
+      "title": "Matrix",
+      "nodes": []
+     }
+    },
+    {
+     "method": "GET",
+     "url": "/api/pages/{fresh.page}",
+     "status": 200
+    },
+    {
+     "method": "PUT",
+     "url": "/api/pages/{fresh.page}",
+     "status": 200,
+     "body": {
+      "slug": "matrix-{uniq}",
+      "title": "Matrix saved",
+      "nodes": []
+     }
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/pages/{fresh.page}",
+     "status": 200,
+     "body": {
+      "title": "Matrix renamed"
+     }
+    },
+    {
+     "method": "DELETE",
+     "url": "/api/pages/{fresh.page}",
+     "status": 204
+    }
+   ]
+  },
+  {
+   "id": "I1",
+   "label": "Insights reports and CSV",
+   "needs": "insights.view",
+   "allowed": [
+    "olivia",
+    "sam",
+    "max",
+    "finn",
+    "vera"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/reports/summary",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/reports/discounts?groupBy=day",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/reports/discounts?groupBy=discount",
+     "status": 200,
+     "accept": "text/csv"
+    },
+    {
+     "method": "GET",
+     "url": "/api/reports/choices",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/reports/saved-for-later",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/reports/search-misses",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "S1",
+   "label": "Change time zone / display settings",
+   "needs": "settings.manage",
+   "allowed": [
+    "olivia",
+    "sam"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/settings/timezone-impact?tz=Europe%2FLisbon",
+     "status": 200
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/settings",
+     "status": 200,
+     "body": {
+      "display": {
+       "showBadge": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "X1",
+   "label": "Team: list, invite, revoke link, suspend, remove, restore",
+   "needs": "sudo",
+   "allowed": [
+    "olivia"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/staff",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/staff/{fresh.member}",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/staff",
+     "status": 201,
+     "body": {
+      "email": "matrix-{uniq}@staff.test",
+      "name": "Matrix invitee"
+     }
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/staff/{fresh.member}",
+     "status": 200,
+     "body": {
+      "name": "Renamed member",
+      "version": 1
+     }
+    },
+    {
+     "method": "PUT",
+     "url": "/api/staff/{fresh.member}/groups",
+     "status": 200,
+     "body": {
+      "groupIds": []
+     }
+    },
+    {
+     "method": "POST",
+     "url": "/api/staff/{fresh.member}/links",
+     "status": 201,
+     "body": {
+      "purpose": "reset"
+     }
+    },
+    {
+     "method": "POST",
+     "url": "/api/staff/{fresh.member}/links/revoke",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/staff/{fresh.member}/suspend",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/staff/{fresh.member}/reactivate",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/staff/{fresh.member}/sign-out",
+     "status": 200
+    },
+    {
+     "method": "DELETE",
+     "url": "/api/staff/{fresh.member}",
+     "status": 204
+    },
+    {
+     "method": "POST",
+     "url": "/api/staff/{fresh.member}/restore",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/permissions",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "X2",
+   "label": "Permission groups",
+   "needs": "sudo",
+   "allowed": [
+    "olivia"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/staff-groups",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/staff-groups",
+     "status": 201,
+     "body": {
+      "name": "Matrix group {uniq}",
+      "permissions": [
+       "orders.view"
+      ]
+     }
+    },
+    {
+     "method": "GET",
+     "url": "/api/staff-groups/{fresh.group}",
+     "status": 200
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/staff-groups/{fresh.group}",
+     "status": 200,
+     "body": {
+      "description": "edited",
+      "version": 1
+     }
+    },
+    {
+     "method": "POST",
+     "url": "/api/staff-groups/{fresh.group}/members",
+     "status": 200,
+     "body": {
+      "add": [
+       "{fresh.member}"
+      ]
+     }
+    },
+    {
+     "method": "DELETE",
+     "url": "/api/staff-groups/{fresh.group}",
+     "status": 204
+    }
+   ]
+  },
+  {
+   "id": "X3",
+   "label": "Activity page",
+   "needs": "sudo",
+   "allowed": [
+    "olivia"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/activity",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/activity?kinds=sign_in&limit=5",
+     "status": 200,
+     "accept": "text/csv"
+    },
+    {
+     "method": "GET",
+     "url": "/api/activity/changes/{auditEntry}",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/audit",
+     "status": 200
+    }
+   ]
+  },
+  {
+   "id": "X4",
+   "label": "Security settings (password policies, retention)",
+   "needs": "sudo",
+   "allowed": [
+    "olivia"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/security-settings",
+     "status": 200
+    },
+    {
+     "method": "PATCH",
+     "url": "/api/security-settings",
+     "status": 200,
+     "body": {
+      "activityRetentionDays": 180,
+      "version": "{securityVersion}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "A1",
+   "label": "Sign in; My account; change own password; sign out everywhere",
+   "needs": "authenticated",
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "cleo",
+    "dana",
+    "max",
+    "suki",
+    "finn",
+    "vera",
+    "nico",
+    "mia"
+   ],
+   "api": [
+    {
+     "method": "GET",
+     "url": "/api/me",
+     "status": 200
+    },
+    {
+     "method": "GET",
+     "url": "/api/settings",
+     "status": 200
+    },
+    {
+     "method": "POST",
+     "url": "/api/activity/beacon",
+     "status": 204,
+     "body": {
+      "kind": "page_view",
+      "path": "/account"
+     }
+    },
+    {
+     "method": "POST",
+     "url": "/api/auth/logout",
+     "status": 204
+    },
+    {
+     "method": "POST",
+     "url": "/api/me/password",
+     "status": 200,
+     "body": {
+      "current": "{password}",
+      "password": "{password}-new"
+     },
+     "adoptToken": true
+    },
+    {
+     "method": "POST",
+     "url": "/api/me/password",
+     "status": 200,
+     "body": {
+      "current": "{password}-new",
+      "password": "{password}"
+     },
+     "adoptToken": true
+    },
+    {
+     "method": "POST",
+     "url": "/api/me/sign-out-everywhere",
+     "status": 204,
+     "relogin": true
+    }
+   ]
+  }
+ ],
+ "menus": {
+  "olivia": [
+   "Products",
+   "Categories",
+   "Orders",
+   "Discounts",
+   "Customers",
+   "Insights",
+   "Pages",
+   "Activity",
+   "Settings",
+   "Team",
+   "My account"
+  ],
+  "sam": [
+   "Products",
+   "Categories",
+   "Orders",
+   "Discounts",
+   "Customers",
+   "Insights",
+   "Pages",
+   "Settings",
+   "My account"
+  ],
+  "pat": [
+   "Products",
+   "Categories",
+   "Orders",
+   "My account"
+  ],
+  "cleo": [
+   "Products",
+   "Categories",
+   "My account"
+  ],
+  "dana": [
+   "Products",
+   "Categories",
+   "Pages",
+   "My account"
+  ],
+  "max": [
+   "Products",
+   "Categories",
+   "Discounts",
+   "Insights",
+   "My account"
+  ],
+  "suki": [
+   "Orders",
+   "Customers",
+   "My account"
+  ],
+  "finn": [
+   "Products",
+   "Categories",
+   "Orders",
+   "Discounts",
+   "Insights",
+   "My account"
+  ],
+  "vera": [
+   "Products",
+   "Categories",
+   "Orders",
+   "Discounts",
+   "Customers",
+   "Insights",
+   "My account"
+  ],
+  "nico": [
+   "My account"
+  ],
+  "mia": [
+   "Products",
+   "Categories",
+   "Orders",
+   "Pages",
+   "My account"
+  ]
+ },
+ "screens": [
+  {
+   "path": "/products",
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "cleo",
+    "dana",
+    "max",
+    "finn",
+    "vera",
+    "mia"
+   ]
+  },
+  {
+   "path": "/categories",
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "cleo",
+    "dana",
+    "max",
+    "finn",
+    "vera",
+    "mia"
+   ]
+  },
+  {
+   "path": "/orders",
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "suki",
+    "finn",
+    "vera",
+    "mia"
+   ]
+  },
+  {
+   "path": "/discounts",
+   "allowed": [
+    "olivia",
+    "sam",
+    "max",
+    "finn",
+    "vera"
+   ]
+  },
+  {
+   "path": "/discounts/new",
+   "allowed": [
+    "olivia",
+    "sam",
+    "max"
+   ]
+  },
+  {
+   "path": "/discounts/simulate",
+   "allowed": [
+    "olivia",
+    "sam",
+    "max",
+    "finn",
+    "vera"
+   ]
+  },
+  {
+   "path": "/discounts/profiles",
+   "allowed": [
+    "olivia",
+    "sam",
+    "max",
+    "finn",
+    "vera"
+   ]
+  },
+  {
+   "path": "/customers",
+   "allowed": [
+    "olivia",
+    "sam",
+    "suki",
+    "vera"
+   ]
+  },
+  {
+   "path": "/insights",
+   "allowed": [
+    "olivia",
+    "sam",
+    "max",
+    "finn",
+    "vera"
+   ]
+  },
+  {
+   "path": "/pages",
+   "allowed": [
+    "olivia",
+    "sam",
+    "dana",
+    "mia"
+   ]
+  },
+  {
+   "path": "/activity",
+   "allowed": [
+    "olivia"
+   ]
+  },
+  {
+   "path": "/settings",
+   "allowed": [
+    "olivia",
+    "sam"
+   ]
+  },
+  {
+   "path": "/team",
+   "allowed": [
+    "olivia"
+   ]
+  },
+  {
+   "path": "/team/groups",
+   "allowed": [
+    "olivia"
+   ]
+  },
+  {
+   "path": "/account",
+   "allowed": [
+    "olivia",
+    "sam",
+    "pat",
+    "cleo",
+    "dana",
+    "max",
+    "suki",
+    "finn",
+    "vera",
+    "nico",
+    "mia"
+   ]
+  }
+ ]
+}

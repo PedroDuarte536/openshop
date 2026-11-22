@@ -1,4 +1,5 @@
-import { SYSTEM_PAGES, normalizeDoc, renderPage, type CategoryRef, type Node, type PageDoc, type ProductCard, type RenderContext } from "@openshop/renderer";
+import { SYSTEM_PAGES, normalizeDoc, renderPage, type CategoryRef, type Node, type PageDoc, type ProductCard, type RenderContext, type RenderOptions } from "@openshop/renderer";
+import type { Filter } from "@openshop/db";
 import type { Db, Product } from "./types.ts";
 
 function collect(nodes: Node[], types: string[], out: Node[] = []): Node[] {
@@ -16,26 +17,46 @@ async function catalogueLists(db: Db, doc: PageDoc): Promise<Map<string, Product
   for (const g of collect(doc.nodes, ["productGrid"])) {
     const p = g.props as { categoryId?: string; limit?: number; source?: string };
     if (p.source === "results") continue;
-    const filter = p.categoryId ? { active: true, categoryId: p.categoryId } : { active: true };
+    const filter: Filter = p.categoryId ? { active: true, categoryId: p.categoryId } : { active: true };
     lists.set(g.id, (await db.products.find(filter, { sort: { name: 1 }, limit: p.limit ?? 4 })).map(toCard));
   }
   return lists;
 }
 
+/**
+ * Bump when published HTML changes shape; stored pages rendered by an older version are re-rendered once at startup.
+ * 2: price hooks + storefront script (prices and offers are loaded from the API, never stored in HTML).
+ * 3: styles for the search suggestions (search boxes on stored pages).
+ */
+export const RENDERER_VERSION = 3;
+
 /** Validates, cleans and renders. Returns the cleaned document (safe to store) and its final HTML. */
-export async function renderDoc(db: Db, raw: unknown, ctx: RenderContext = {}): Promise<{ doc: PageDoc; html: string }> {
+export async function renderDoc(db: Db, raw: unknown, ctx: RenderContext = {}, meta?: RenderOptions["meta"]): Promise<{ doc: PageDoc; html: string }> {
   const doc = normalizeDoc(raw); // throws on invalid structure
   const lists = await catalogueLists(db, doc);
   const categories = ctx.categories ?? (await categoryRefs(db));
-  return { doc, html: renderPage(doc, { context: { ...ctx, categories }, products: (n) => lists.get(n.id) ?? [] }) };
+  return { doc, html: renderPage(doc, { context: { ...ctx, categories }, products: (n) => lists.get(n.id) ?? [], shopScript: true, ...(meta ? { meta } : {}) }) };
 }
 export const renderStored = (db: Db, raw: unknown) => renderDoc(db, raw);
 
 /** Static HTML goes stale when the catalogue changes, so re-render the pages that show it. System pages render per request. */
 export async function rerenderDynamicPages(db: Db): Promise<void> {
   for (const p of await db.pages.find({ system: null })) {
-    if (isDynamic(p.nodes)) await db.pages.update(p.id, { html: (await renderStored(db, { title: p.title, theme: p.theme, nodes: p.nodes })).html });
+    if (isDynamic(p.nodes)) await db.pages.update(p.id, { html: (await renderStored(db, { title: p.title, theme: p.theme, nodes: p.nodes })).html, rendererVersion: RENDERER_VERSION });
   }
+}
+
+/** One-time upgrade: re-render stored pages made by an older renderer (adds price hooks and the shop script). */
+export async function migratePages(db: Db): Promise<number> {
+  let n = 0;
+  for (const p of await db.pages.find({ system: null })) {
+    if (p.rendererVersion === RENDERER_VERSION) continue;
+    try {
+      await db.pages.update(p.id, { html: (await renderStored(db, { title: p.title, theme: p.theme, nodes: p.nodes })).html, rendererVersion: RENDERER_VERSION });
+      n++;
+    } catch (e) { console.warn(`Could not re-render page ${p.slug}: ${(e as Error).message}`); }
+  }
+  return n;
 }
 
 const ensured = new WeakMap<Db, Promise<void>>();
@@ -57,8 +78,8 @@ export function ensureSystemPages(db: Db): Promise<void> {
   return p;
 }
 
-export async function renderSystem(db: Db, key: "product" | "category" | "search", ctx: RenderContext, title?: string): Promise<string> {
+export async function renderSystem(db: Db, key: "product" | "category" | "search", ctx: RenderContext, title?: string, meta?: RenderOptions["meta"]): Promise<string> {
   await ensureSystemPages(db);
   const [p] = await db.pages.find({ system: key }, { limit: 1 });
-  return (await renderDoc(db, { title: title ?? p.title, theme: p.theme, nodes: p.nodes }, ctx)).html;
+  return (await renderDoc(db, { title: title ?? p.title, theme: p.theme, nodes: p.nodes }, ctx, meta)).html;
 }

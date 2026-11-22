@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
 import { SECTION_TEMPLATES, renderParts } from '@openshop/renderer';
 import type { Device, Node, ProductCard } from '@openshop/renderer';
-import { ApiService, Product, Category } from '../api.service';
+import { ApiService, ProductSummary, Category } from '../api.service';
 import { BuilderStore } from './store';
 import { Palette } from './palette';
 import { Inspector } from './inspector';
@@ -52,6 +52,12 @@ declare global { interface Window { osBuilderHost?: unknown } }
       <aside class="left"><os-palette /></aside>
 
       <section class="stage-wrap" #wrap (click)="onBackdrop($event)">
+        @if (newWidgets(); as nw) {
+          <div class="newfeat" role="status">
+            <span>New for this page: {{ nw }}. Your design isn't changed until you add them.</span>
+            <button type="button" (click)="store.addCatalogueWidgets(system()); $event.stopPropagation()">Add them</button>
+          </div>
+        }
         <div class="stage" [style.width.px]="stageW()">
           <div class="chrome"><span></span><span></span><span></span>
             @if (systemLabel()) { <em class="sys" title="This page has a fixed address">{{ systemLabel() }}</em> }
@@ -81,9 +87,15 @@ export class Builder implements OnInit, OnDestroy {
   system = signal<string | null>(null);
   errorMsg = signal('');
   cats = signal<Category[]>([]);
+  /** Essential pages designed before the catalogue widgets existed get a one-click offer to add them (plan C-11). */
+  newWidgets = computed(() => {
+    const missing = this.store.missingCatalogueWidgets(this.system());
+    const names: Record<string, string> = { searchFilters: 'filters', resultsBar: 'sorting and result count', productVariants: 'variant choices', bundleContents: 'bundle contents', productSpecs: 'product details', productBundles: '"As seen in these bundles"' };
+    return missing.length ? missing.map((t) => names[t] ?? t).join(', ') : '';
+  });
   systemLabel = computed(() => ({ product: 'Product page · every product', category: 'Category page · every category', search: 'Search page · every search' } as Record<string, string>)[this.system() ?? ''] ?? '');
   status = signal<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  products = signal<Product[]>([]);
+  products = signal<ProductSummary[]>([]);
   ready = signal(false);
   avail = signal({ w: 900, h: 600 });
   private trust = (h: string) => this.san.bypassSecurityTrustHtml(h);
@@ -108,8 +120,8 @@ export class Builder implements OnInit, OnDestroy {
     const all = this.products();
     return (n: Node): ProductCard[] => {
       const p = n.props as { categoryId?: string; limit?: number };
-      return all.filter((x) => x.active && (!p.categoryId || x.categoryId === p.categoryId)).slice(0, p.limit ?? 4)
-        .map((x) => ({ id: x.id, name: x.name, price: x.price, image: x.images?.[0], href: `/shop/product/${x.id}` }));
+      return all.filter((x) => x.active && !x.deleted && (!p.categoryId || x.categoryId === p.categoryId)).slice(0, p.limit ?? 4)
+        .map((x) => ({ id: x.id, name: x.name, price: x.price, image: x.image ?? undefined, href: `/shop/product/${x.id}` }));
     };
   });
   private parts = computed(() => {
@@ -139,7 +151,8 @@ export class Builder implements OnInit, OnDestroy {
     this.frame.nativeElement.srcdoc = SKELETON;
     this.api.categories().subscribe({ next: (c) => this.cats.set(c), error: () => {} });
     this.api.page(this.id()).subscribe((p) => { this.slug.set(p.slug); this.system.set(p.system ?? null); this.store.load({ title: p.title, theme: p.theme, nodes: p.nodes ?? [] }); });
-    this.api.products().subscribe({ next: (p) => this.products.set(p), error: () => {} });
+    // The canvas previews grids with the first visible products (the published page uses the live catalogue).
+    this.api.productSummaries({ status: 'visible', sort: 'name', limit: '200' }).subscribe({ next: (p) => this.products.set(p.items), error: () => {} });
     this.resize = new ResizeObserver(([e]) => this.avail.set({ w: e.contentRect.width, h: e.contentRect.height }));
     this.resize.observe(this.wrap.nativeElement);
   }
